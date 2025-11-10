@@ -1,0 +1,45 @@
+{
+  "$schema": "https://example.com/schemas/supplier-search.json",
+  "defaultPageSize": 50,
+  "maxCacheItems": 500,
+  "recentLimit": 12,
+  "suppliers": {
+    "ABC": {
+      "pageSize": 50,
+      "fuzzyThreshold": 0.32,
+      "featuredQueries": ["starter", "bundle", "fasteners"],
+      "recentKey": "abc:recent",
+      "skuFields": ["itemnumber"],
+      "descriptionFields": ["familyname", "itemdescription"],
+      "smokeTest": {
+        "sku": "",
+        "fuzzy": "starter"
+      }
+    },
+    "SRS": {
+      "pageSize": 50,
+      "fuzzyThreshold": 0.3,
+      "featuredQueries": ["shingles", "underlayment", "vent"],
+      "recentKey": "srs:recent",
+      "skuFields": ["sku", "productId", "familyId", "productid", "familyid"],
+      "descriptionFields": ["productName", "marketingDescription", "familyName", "description", "productDescription"],
+      "smokeTest": {
+        "sku": "",
+        "fuzzy": "shingle"
+      }
+    },
+    "BEACON": {
+      "pageSize": 50,
+      "fuzzyThreshold": 0.28,
+      "featuredQueries": ["architectural", "ice shield", "ridge vent"],
+      "recentKey": "beacon:recent",
+      "skuFields": ["itemNumber", "itemnumber", "sku"],
+      "descriptionFields": ["marketingdescription", "familyname", "itemdescription", "description"],
+      "smokeTest": {
+        "sku": "",
+        "fuzzy": "architectural"
+      }
+    }
+  }
+}
+

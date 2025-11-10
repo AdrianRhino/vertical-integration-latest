@@ -1,0 +1,19 @@
+{
+  "name": "Get Started App",
+  "description": "This is a vertical integration app that allows users to view and manage orders to Suppliers.",
+  "uid": "get_started_app",
+  "scopes": ["crm.objects.contacts.read", "crm.objects.contacts.write", "crm.objects.deals.read", "crm.objects.deals.write"],
+  "public": false,
+  "extensions": {
+    "crm": {
+      "cards": [
+        {
+          "file": "extensions/example-card.json"
+        }
+      ]
+    }
+  },
+  "webhooks": {
+    "file": "./webhooks/webhooks.json"
+  }
+}
