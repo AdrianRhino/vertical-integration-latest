@@ -14,6 +14,7 @@ import PricingTable from "./pages/02-pricingTable";
 import DeliveryForm from "./pages/03-deliveryForm";
 import ReviewSubmit from "./pages/04-reviewSubmit";
 import OrderSuccessPage from "./pages/05-successPage";
+import OrderTest from "./pages/06-orderTesting";
 
 // Define the extension to be run within the HubSpot CRM
 hubspot.extend(({ context, runServerlessFunction, actions }) => {
@@ -106,10 +107,14 @@ const Extension = ({
             continueText="Back to Order Start"
           />
         );
+      case 6:
+        return (
+          <OrderTest />
+        );
     }
   };
 
-  const [orderPage, setOrderPage] = useState(0);
+  const [orderPage, setOrderPage] = useState(6);
   const [orderedLineItems, setOrderedLineItems] = useState([]);
   const [fullOrder, setFullOrder] = useState({});
   const [parsedOrder, setParsedOrder] = useState(null);
