@@ -1,0 +1,132 @@
+{
+  "suppliers": {
+    "ABC": {
+      "requiredFields": {
+        "accountNumber": true,
+        "branchId": true
+      },
+      "fieldPaths": {
+        "accountNumber": [
+          "accountNumber",
+          "account_number",
+          "customerCode",
+          "customer_code",
+          "customerNumber",
+          "customer_number",
+          "accountId",
+          "account_id",
+          "delivery.accountNumber",
+          "delivery.account_number",
+          "delivery.customerNumber",
+          "delivery.customer_number",
+          "delivery.ship_to_number",
+          "shipToNumber",
+          "ship_to_number"
+        ],
+        "branchId": [
+          "branchId",
+          "branch_id",
+          "branchNumber",
+          "branch_number",
+          "branchCode",
+          "branch_code",
+          "delivery.branch",
+          "delivery.branchId",
+          "delivery.branch_id",
+          "delivery.branch_code",
+          "delivery.branch_number",
+          "sellingBranchId",
+          "selling_branch_id"
+        ]
+      },
+      "messages": {
+        "accountNumber": "ABC requires an account number before we can build the order payload.",
+        "branchId": "ABC requires a branch/warehouse identifier."
+      },
+      "defaultValues": {
+        "accountNumber": "2063975-2",
+        "branchId": "461",
+        "requestId": "Test-Quote-123"
+      }
+    },
+    "SRS": {
+      "requiredFields": {
+        "accountNumber": true,
+        "branchId": true
+      },
+      "fieldPaths": {
+        "accountNumber": [
+          "customerCode",
+          "customer_code",
+          "accountNumber",
+          "account_number",
+          "delivery.accountNumber",
+          "delivery.account_number",
+          "delivery.customerNumber",
+          "delivery.customer_number"
+        ],
+        "branchId": [
+          "branchCode",
+          "branch_code",
+          "branchId",
+          "branch_id",
+          "delivery.branchCode",
+          "delivery.branch_code"
+        ],
+        "jobNumber": [
+          "jobNumber",
+          "job_number",
+          "delivery.jobNumber",
+          "delivery.job_number"
+        ]
+      },
+      "messages": {
+        "accountNumber": "SRS requires the customer account number.",
+        "branchId": "SRS requires a branch code.",
+        "jobNumber": "SRS expects a numeric job account number (we default to 0 if empty)."
+      },
+      "defaultValues": {
+        "accountNumber": "RCO207",
+        "branchId": "SSSAN",
+        "requestId": "SPR-1",
+        "jobNumber": "1",
+        "sourceSystem": "RHINO"
+      }
+    },
+    "BEACON": {
+      "requiredFields": {
+        "accountNumber": true,
+        "branchId": true
+      },
+      "fieldPaths": {
+        "accountNumber": [
+          "accountNumber",
+          "account_number",
+          "accountId",
+          "account_id",
+          "delivery.accountId",
+          "delivery.account_id",
+          "shipToNumber",
+          "ship_to_number"
+        ],
+        "branchId": [
+          "branchId",
+          "branch_id",
+          "sellingBranchId",
+          "selling_branch_id",
+          "delivery.sellingBranch",
+          "delivery.selling_branch",
+          "delivery.shipping_branch"
+        ]
+      },
+      "messages": {
+        "accountNumber": "Beacon orders need an account ID.",
+        "branchId": "Beacon requires a shipping branch."
+      },
+      "defaultValues": {
+        "accountNumber": "557799"
+      }
+    }
+  }
+}
+

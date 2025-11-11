@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "deliveryFieldMap": {
+    "address_line_1": "address_line_1",
+    "city": "city",
+    "state": "state",
+    "zip_code": "zip_code"
+  }
+}
+

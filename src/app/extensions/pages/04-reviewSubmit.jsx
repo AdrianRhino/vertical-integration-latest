@@ -69,6 +69,13 @@ const ReviewSubmit = ({
     const mergedTemplateItems =
       fullOrder.templateItems ?? base.templateItems ?? [];
 
+    const addressSnapshot = {
+      address_line_1: mergedDelivery.address_line_1 || "",
+      city: mergedDelivery.city || "",
+      state: mergedDelivery.state || "",
+      zip_code: mergedDelivery.zip_code || "",
+    };
+
     return {
       ...base,
       ...fullOrder,
@@ -79,6 +86,7 @@ const ReviewSubmit = ({
       delivery: mergedDelivery,
       fullOrderItems: mergedItems,
       templateItems: mergedTemplateItems,
+      addressSnapshot,
     };
   };
 
@@ -322,6 +330,7 @@ const ReviewSubmit = ({
               Save as Draft
             </Button>
           </ButtonRow>
+          <Button variant="secondary" onClick={() => setOrderPage(6)}>Go to Testing Panel</Button>
         </>
       )}
     </>

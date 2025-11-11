@@ -27,6 +27,8 @@ const DeliveryForm = ({ fullOrder, setFullOrder, runServerless, parsedOrder }) =
     };
 
     fetchProductionTeam();
+    console.log("fullOrder", fullOrder);
+    console.log("parsedOrder", parsedOrder);
   }, []);
 
   return (

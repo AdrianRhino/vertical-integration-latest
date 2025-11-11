@@ -46,6 +46,42 @@ export const deliveryComponent = [
       view: true,
       script: "",
     },
+    {
+      label: "Customer Address Confirmation",
+      type: "input",
+      required: false,
+      internalName: "address_line_1",
+      placeholder: "",
+      view: true,
+      script: "",
+    },
+    {
+      label: "Customer City Confirmation",
+      type: "input",
+      required: false,
+      internalName: "city",
+      placeholder: "",
+      view: true,
+      script: "",
+    },
+    {
+      label: "Customer State Confirmation",
+      type: "input",
+      required: false,
+      internalName: "state",
+      placeholder: "",
+      view: true,
+      script: "",
+    },
+    {
+      label: "Customer Zip Code Confirmation",
+      type: "input",
+      required: false,
+      internalName: "zip_code",
+      placeholder: "",
+      view: true,
+      script: "",
+    }
   ];
 
   export const moneyFormatter = (type, price, qty) => {

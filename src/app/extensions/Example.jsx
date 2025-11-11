@@ -15,6 +15,7 @@ import DeliveryForm from "./pages/03-deliveryForm";
 import ReviewSubmit from "./pages/04-reviewSubmit";
 import OrderSuccessPage from "./pages/05-successPage";
 import OrderTest from "./pages/06-orderTesting";
+import { prefillDeliveryAddress } from "./helperFunctions/prefillDeliveryAddress";
 
 // Define the extension to be run within the HubSpot CRM
 hubspot.extend(({ context, runServerlessFunction, actions }) => {
@@ -109,21 +110,74 @@ const Extension = ({
         );
       case 6:
         return (
-          <OrderTest />
+          <OrderTest
+            fullOrder={fullOrder}
+            parsedOrder={parsedOrder}
+          />
         );
     }
   };
 
-  const [orderPage, setOrderPage] = useState(6);
+  const [orderPage, setOrderPage] = useState(0);
   const [orderedLineItems, setOrderedLineItems] = useState([]);
   const [fullOrder, setFullOrder] = useState({});
   const [parsedOrder, setParsedOrder] = useState(null);
   const [orderStatus, setOrderStatus] = useState({});
   const pricingGuardRef = useRef(null);
+  const dealAddressRef = useRef({});
+  const addressPrefillAppliedRef = useRef(false);
 
   useEffect(() => {
     parseSelectedOrder(fullOrder.selectedOrder);
   }, [fullOrder.selectedOrder]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDealAddressDefaults() {
+      try {
+        const properties =
+          (await fetchCrmObjectProperties([
+            "address_line_1",
+            "city",
+            "state",
+            "zip_code",
+          ])) || {};
+
+        if (cancelled) return;
+        dealAddressRef.current = properties;
+        setFullOrder((prev) => {
+          const currentDelivery = prev.delivery || {};
+          const { delivery: mergedDelivery, touched } = prefillDeliveryAddress({
+            delivery: currentDelivery,
+            crm: properties,
+          });
+
+          if (!touched) return prev;
+          return {
+            ...prev,
+            delivery: mergedDelivery,
+          };
+        });
+        console.log("fullOrder: ", properties);
+        setFullOrder((prev) => ({ ...prev, address: properties }));
+      } catch (error) {
+        console.error("Failed to prefill delivery address", error);
+      } finally {
+        if (!cancelled) {
+          addressPrefillAppliedRef.current = true;
+        }
+      }
+    }
+
+    if (!addressPrefillAppliedRef.current) {
+      loadDealAddressDefaults();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchCrmObjectProperties, setFullOrder]);
 
   const parseSelectedOrder = (selectedOrder) => {
     console.log(
@@ -158,7 +212,18 @@ const Extension = ({
   };
 
   const clearOrder = () => {
-    setFullOrder({});
+    const prefilled = prefillDeliveryAddress({
+      delivery: {},
+      crm: dealAddressRef.current,
+    }).delivery;
+
+    setFullOrder(
+      hasAnyValue(prefilled)
+        ? {
+            delivery: prefilled,
+          }
+        : {}
+    );
     setOrderedLineItems([]);
     setParsedOrder(null);
     setOrderStatus({
@@ -249,3 +314,11 @@ const Extension = ({
 };
 
 export default Extension;
+
+function hasAnyValue(obj = {}) {
+  return Object.values(obj).some((value) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    return true;
+  });
+}

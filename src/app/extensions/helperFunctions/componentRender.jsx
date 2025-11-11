@@ -84,7 +84,21 @@ export const renderField = (
       case "scriptOnly":
         return <Heading key={field?.internalName}>{field?.script}</Heading>;
       case "input":
-  
+        return (
+          <>
+          <Text variant="microcopy">{field?.label || field?.placeholder}</Text>
+          <Input
+            key={field?.internalName}
+            placeholder={`Enter ${field?.placeholder}`}
+            value={value}
+            onChange={(val) =>
+              setFormData(field?.internalName, val)
+            }
+          />
+          <Text></Text>
+          </>
+          
+        )
       case "dateInput":
         // DateInput expects { year, month, date } object or undefined
         // Handle different value formats: string, DateInput object, or empty/null

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "purchaseOrder": {
+    "required": true,
+    "defaultPrefix": "WEB-",
+    "maxLength": 20,
+    "fallbackSequence": "00001"
+  },
+  "dates": {
+    "deliveryRequestedFor": {
+      "format": "YYYY-MM-DD",
+      "fallbackDaysFromToday": 2
+    }
+  },
+  "lines": {
+    "idType": "integer",
+    "maxCount": 99
+  },
+  "shipTo": {
+    "omitEmptyAddress": true
+  },
+  "contacts": {
+    "preferredFunctionCode": "SM",
+    "default": {
+      "name": "Order Submitter",
+      "functionCode": "SM",
+      "email": "submitter@example.com",
+      "phones": [
+        {
+          "number": "8882221111",
+          "type": "MOBILE",
+          "ext": ""
+        }
+      ]
+    }
+  }
+}
+
