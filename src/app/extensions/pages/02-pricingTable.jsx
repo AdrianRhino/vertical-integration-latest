@@ -44,6 +44,7 @@ const PricingTable = ({
   runServerless,
   parsedOrder,
   registerPricingGuard,
+  setNextButtonDisabled,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [pricingTableItems, setPricingTableItems] = useState([]);
@@ -239,6 +240,20 @@ const PricingTable = ({
     loadSupplierProducts({ supplier, q: "", afterId: null, replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullOrder?.supplier, parsedOrder?.supplier]);
+
+useEffect(() => {
+  const currentOrderItems = Array.isArray(fullOrder?.orderItems) ? fullOrder.orderItems.length : 0;
+  const currentFullOrderItems = Array.isArray(fullOrder?.fullOrderItems) ? fullOrder.fullOrderItems.length : 0;
+  const parsedFullOrderItems = Array.isArray(parsedOrder?.fullOrderItems) ? parsedOrder.fullOrderItems.length : 0;
+  const totalLineItems = currentOrderItems + currentFullOrderItems + parsedFullOrderItems;
+
+  setNextButtonDisabled(!(totalLineItems > 0));
+}, [
+  fullOrder?.orderItems?.length,
+  fullOrder?.fullOrderItems?.length,
+  parsedOrder?.fullOrderItems?.length,
+  setNextButtonDisabled,
+]);
 
   const getSearchProducts = (searchQuery, supplier) => {
     let filteredProducts = [];

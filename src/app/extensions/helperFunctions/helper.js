@@ -84,6 +84,8 @@ export const deliveryComponent = [
     }
   ];
 
+export const deliveryRequiredFields = ["primary_contact", "delivery_type", "time_code"];
+
   export const moneyFormatter = (type, price, qty) => {
     if (type === 'unitPrice') {
       const formattedPrice = Number(price).toFixed(2);

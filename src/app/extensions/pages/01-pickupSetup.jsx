@@ -2,7 +2,7 @@ import { Select } from "@hubspot/ui-extensions";
 import { supplierOptions, templateOptions } from "../helperFunctions/appOptions";
 import { useEffect, useState } from "react";
 
-const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrder }) => {
+const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrder, setNextButtonDisabled }) => {
 
   const [tickets, setTickets] = useState([]);
 
@@ -23,6 +23,13 @@ const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrde
     getTickets();
   }, []);
 
+  useEffect(() => {
+    if (fullOrder.ticket && fullOrder.supplier && fullOrder.template) {
+      setNextButtonDisabled(false);
+    } else {
+      setNextButtonDisabled(true);
+    }
+  }, [fullOrder.ticket, fullOrder.supplier, fullOrder.template]);
 
   return (
     <>
