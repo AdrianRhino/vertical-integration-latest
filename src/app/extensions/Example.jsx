@@ -49,6 +49,7 @@ const Extension = ({
             setTagStatus={setTagStatus}
             clearOrder={clearOrder}
             setOrderPage={setOrderPage}
+            setNextButtonDisabled={setNextButtonDisabled}
           />
         );
       case 1:
@@ -59,6 +60,7 @@ const Extension = ({
             setFullOrder={setFullOrder}
             fullOrder={fullOrder}
             parsedOrder={parsedOrder}
+            setNextButtonDisabled={setNextButtonDisabled}
           />
         );
       case 2:
@@ -73,6 +75,7 @@ const Extension = ({
             registerPricingGuard={(fn) => {
               pricingGuardRef.current = fn || null;
             }}
+            setNextButtonDisabled={setNextButtonDisabled}
           />
         );
       case 3:
@@ -83,6 +86,7 @@ const Extension = ({
             runServerless={runServerless}
             parsedOrder={parsedOrder}
             clearOrder={clearOrder}
+            setNextButtonDisabled={setNextButtonDisabled}
           />
         );
       case 4:
@@ -97,6 +101,7 @@ const Extension = ({
             tagStatus={orderStatus.text}
             sendAlert={sendAlert}
             setOrderPage={setOrderPage}
+            setNextButtonDisabled={setNextButtonDisabled}
           />
         );
       case 5:
@@ -106,6 +111,7 @@ const Extension = ({
             setOrderPage={setOrderPage}
             orderPage={orderPage}
             continueText="Back to Order Start"
+            setNextButtonDisabled={setNextButtonDisabled}
           />
         );
       case 6:
@@ -123,9 +129,11 @@ const Extension = ({
   const [fullOrder, setFullOrder] = useState({});
   const [parsedOrder, setParsedOrder] = useState(null);
   const [orderStatus, setOrderStatus] = useState({});
+  const [NextButtonDisabled, setNextButtonDisabled] = useState(false);
   const pricingGuardRef = useRef(null);
   const dealAddressRef = useRef({});
   const addressPrefillAppliedRef = useRef(false);
+
 
   useEffect(() => {
     parseSelectedOrder(fullOrder.selectedOrder);
@@ -278,7 +286,7 @@ const Extension = ({
         </Button>
         <Button
           variant="primary"
-          disabled={orderPage === 4}
+          disabled={orderPage === 4 || NextButtonDisabled}
           onClick={async () => {
             if (fullOrder.selectedOrder?.value?.properties?.status === "Submitted") {
               setOrderPage(4);

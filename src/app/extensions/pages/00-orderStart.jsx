@@ -4,20 +4,20 @@ import { hubspot } from "@hubspot/ui-extensions";
 import { appOptions } from "../helperFunctions/appOptions";
 import { parseLineItemsFromString } from "../helperFunctions/helper";
 
-const OrderStart = ({ setFullOrder, fullOrder, context, setTagStatus, clearOrder, setOrderPage }) => {
+const OrderStart = ({ setFullOrder, fullOrder, context, setTagStatus, clearOrder, setOrderPage, setNextButtonDisabled }) => {
   const [chosenAppOption, setChosenAppOption] = useState(null);
   const [allOrders, setAllOrders] = useState([]);
   const [orderOptions, setOrderOptions] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showAlert, setShowAlert] = useState(false); // move to state above
 
-  useEffect(() => {
-    if (chosenAppOption !== "New Order" && chosenAppOption !== null) {
-      getAllOrders();
-    } else {
-      clearOrder();
-    }
-  }, [chosenAppOption]);
+useEffect(() => {
+  if (!chosenAppOption || chosenAppOption === "New Order") {
+    return;
+  }
+
+  getAllOrders();
+}, [chosenAppOption]);
 
   useEffect(() => {
     // Filter orders based on selected option
@@ -83,6 +83,19 @@ useEffect(() => {
   }
 }, [fullOrder.selectedOrderId, allOrders]);
 
+useEffect(() => {
+  if (chosenAppOption === "New Order") {
+    setNextButtonDisabled(false);
+    return;
+  }
+
+  if (chosenAppOption && fullOrder.selectedOrderId) {
+    setNextButtonDisabled(false);
+  } else {
+    setNextButtonDisabled(true);
+  }
+}, [chosenAppOption, fullOrder.selectedOrderId, setNextButtonDisabled]);
+
   return (
     <>
       <Text></Text>
@@ -98,7 +111,23 @@ useEffect(() => {
         value={fullOrder.orderType}
         onChange={(value) => {
           setChosenAppOption(value);
-          setFullOrder((prev) => ({ ...prev, orderType: value }));
+          setSelectedOrder(null);
+          setOrderOptions([]);
+          if (value === "New Order") {
+            clearOrder();
+            setFullOrder((prev) => ({ ...prev, orderType: value }));
+            return;
+          }
+
+          setAllOrders([]);
+          setFullOrder((prev) => ({
+            ...prev,
+            orderType: value,
+            selectedOrderId: null,
+            selectedOrder: null,
+            selectedOrderItems: [],
+          }));
+          setNextButtonDisabled(true);
         }}
       />
       <Text></Text>
@@ -106,6 +135,7 @@ useEffect(() => {
         <Select
           label={`${chosenAppOption} List`}
           options={orderOptions}
+          value={fullOrder.selectedOrderId || undefined}
           onChange={(value) => {
             const order = allOrders.find((order) => order.value.id === value);
             setSelectedOrder(order);
