@@ -31,6 +31,8 @@ hubspot.extend(({ context, runServerlessFunction, actions }) => {
 });
 
 // Define the Extension component, taking in runServerless, context, & sendAlert as props
+const PRIMARY_FLOW_PAGES = [0, 1, 2, 3, 4];
+
 const Extension = ({
   sendAlert,
   runServerless,
@@ -248,6 +250,18 @@ const Extension = ({
   };
   */}
 
+  const currentFlowIndex = PRIMARY_FLOW_PAGES.indexOf(orderPage);
+  const isFlowPage = currentFlowIndex !== -1;
+  const isLastPrimaryPage =
+    isFlowPage && currentFlowIndex === PRIMARY_FLOW_PAGES.length - 1;
+  const nextPrimaryPage = isFlowPage
+    ? PRIMARY_FLOW_PAGES[Math.min(
+        currentFlowIndex + 1,
+        PRIMARY_FLOW_PAGES.length - 1
+      )]
+    : PRIMARY_FLOW_PAGES[0];
+  const shouldDisableNext = NextButtonDisabled || !isFlowPage || isLastPrimaryPage;
+
   return (
     <>
     {orderPage === 5 ? (
@@ -286,7 +300,7 @@ const Extension = ({
         </Button>
         <Button
           variant="primary"
-          disabled={orderPage === 4 || NextButtonDisabled}
+          disabled={shouldDisableNext}
           onClick={async () => {
             if (fullOrder.selectedOrder?.value?.properties?.status === "Submitted") {
               setOrderPage(4);
@@ -308,7 +322,9 @@ const Extension = ({
               }
             }
 
-            setOrderPage(orderPage + 1);
+            if (!shouldDisableNext) {
+              setOrderPage(nextPrimaryPage);
+            }
           }}
         >
           Next
