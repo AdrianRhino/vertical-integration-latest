@@ -467,7 +467,7 @@ async function resolveSkuFields({ supabase, supplier, configuredFields }) {
   const { data: sampleRows, error } = await supabase
     .from(TABLE_NAME)
     .select("*")
-    .ilike("supplier", supplier)
+    .eq("supplier", supplier)
     .limit(1);
 
   if (error) {
