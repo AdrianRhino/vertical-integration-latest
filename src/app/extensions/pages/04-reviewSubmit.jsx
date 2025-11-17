@@ -14,7 +14,7 @@ import {
   ButtonRow,
   hubspot,
 } from "@hubspot/ui-extensions";
-import { moneyFormatter } from "../helperFunctions/helper";
+import { moneyFormatter, formatAddressString } from "../helperFunctions/helper";
 
 const ReviewSubmit = ({
   fullOrder,
@@ -76,6 +76,8 @@ const ReviewSubmit = ({
       zip_code: mergedDelivery.zip_code || "",
     };
 
+    const placedOrderAddress = formatAddressString(mergedDelivery);
+
     return {
       ...base,
       ...fullOrder,
@@ -87,6 +89,7 @@ const ReviewSubmit = ({
       fullOrderItems: mergedItems,
       templateItems: mergedTemplateItems,
       addressSnapshot,
+      placed_order_address: placedOrderAddress,
     };
   };
 

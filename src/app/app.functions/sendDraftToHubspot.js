@@ -39,6 +39,7 @@ exports.main = async (context = {}) => {
     status: "Draft",
     total: fullOrder?.orderTotal?.toString(),
     last_saved_at: new Date().toISOString(),
+    placed_order_address: fullOrder?.placed_order_address || "",
   };
 
   try {

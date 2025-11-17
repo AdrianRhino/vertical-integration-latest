@@ -23,13 +23,49 @@ const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrde
     getTickets();
   }, []);
 
+  // Validate whenever fullOrder or parsedOrder changes
   useEffect(() => {
-    if (fullOrder.ticket && fullOrder.supplier && fullOrder.template) {
-      setNextButtonDisabled(false);
-    } else {
-      setNextButtonDisabled(true);
-    }
-  }, [fullOrder.ticket, fullOrder.supplier, fullOrder.template]);
+    const ticket = fullOrder.ticket || parsedOrder?.ticket;
+    const supplier = fullOrder.supplier || parsedOrder?.supplier;
+    const template = fullOrder.template || parsedOrder?.template;
+    
+    console.log("PickSetup validation check:", { 
+      ticket, 
+      supplier, 
+      template, 
+      fullOrderTicket: fullOrder.ticket,
+      fullOrderSupplier: fullOrder.supplier,
+      fullOrderTemplate: fullOrder.template,
+      parsedOrderTicket: parsedOrder?.ticket,
+      parsedOrderSupplier: parsedOrder?.supplier,
+      parsedOrderTemplate: parsedOrder?.template
+    });
+    
+    // Check if values exist (handle strings, numbers, and truthy values)
+    const hasTicket = ticket !== undefined && ticket !== null && ticket !== "";
+    const hasSupplier = supplier !== undefined && supplier !== null && supplier !== "";
+    const hasTemplate = template !== undefined && template !== null && template !== "";
+    
+    const isValid = hasTicket && hasSupplier && hasTemplate;
+    console.log("PickSetup validation result:", { hasTicket, hasSupplier, hasTemplate, isValid });
+    
+    setNextButtonDisabled(!isValid);
+  }, [
+    fullOrder.ticket, 
+    fullOrder.supplier, 
+    fullOrder.template,
+    fullOrder,
+    parsedOrder,
+    setNextButtonDisabled
+  ]);
+
+  const validateAndSetDisabled = (ticket, supplier, template) => {
+    const hasTicket = ticket !== undefined && ticket !== null && ticket !== "";
+    const hasSupplier = supplier !== undefined && supplier !== null && supplier !== "";
+    const hasTemplate = template !== undefined && template !== null && template !== "";
+    const isValid = hasTicket && hasSupplier && hasTemplate;
+    setNextButtonDisabled(!isValid);
+  };
 
   return (
     <>
@@ -38,7 +74,13 @@ const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrde
       options={tickets} 
       value={fullOrder.ticket || parsedOrder?.ticket}
       onChange={(value) => {
-        setFullOrder(prev => ({...prev, ticket: value}))
+        const updatedOrder = {...fullOrder, ticket: value};
+        setFullOrder(updatedOrder);
+        validateAndSetDisabled(
+          value || parsedOrder?.ticket,
+          updatedOrder.supplier || parsedOrder?.supplier,
+          updatedOrder.template || parsedOrder?.template
+        );
       }}
       />
       <Select 
@@ -46,7 +88,13 @@ const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrde
       options={supplierOptions} 
       value={fullOrder.supplier || parsedOrder?.supplier}
       onChange={(value) => {
-        setFullOrder(prev => ({...prev, supplier: value}))
+        const updatedOrder = {...fullOrder, supplier: value};
+        setFullOrder(updatedOrder);
+        validateAndSetDisabled(
+          updatedOrder.ticket || parsedOrder?.ticket,
+          value || parsedOrder?.supplier,
+          updatedOrder.template || parsedOrder?.template
+        );
       }}
       />
       <Select 
@@ -54,10 +102,17 @@ const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrde
       options={templateOptions} 
       value={fullOrder.template || parsedOrder?.template}
       onChange={(value) => {
-        setFullOrder(prev => 
-          ({...prev, template: value, 
-            templateItems: templateOptions.find(template => template.value === value).items})
-        )
+        const updatedOrder = {
+          ...fullOrder, 
+          template: value, 
+          templateItems: templateOptions.find(template => template.value === value)?.items
+        };
+        setFullOrder(updatedOrder);
+        validateAndSetDisabled(
+          updatedOrder.ticket || parsedOrder?.ticket,
+          updatedOrder.supplier || parsedOrder?.supplier,
+          value || parsedOrder?.template
+        );
       }}
       />
     </>

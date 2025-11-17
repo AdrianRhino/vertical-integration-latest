@@ -157,3 +157,16 @@ export function toSentenceCase(str) {
   if (!str) return "";
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
+
+export function formatAddressString(address = {}) {
+  if (!address || typeof address !== "object") return "";
+  
+  const parts = [];
+  if (address.address_line_1) parts.push(address.address_line_1);
+  if (address.city) parts.push(address.city);
+  
+  const stateZip = [address.state, address.zip_code].filter(Boolean).join(" ");
+  if (stateZip) parts.push(stateZip);
+  
+  return parts.join(", ") || "";
+}

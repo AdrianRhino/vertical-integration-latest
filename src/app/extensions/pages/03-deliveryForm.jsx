@@ -1,10 +1,12 @@
-import { Text, Select } from "@hubspot/ui-extensions";
+import { Text, Select, Button } from "@hubspot/ui-extensions";
 import { deliveryComponent, deliveryRequiredFields } from "../helperFunctions/helper";
 import { renderField } from "../helperFunctions/componentRender";
+import AddressDisplay from "../helperFunctions/AddressDisplay";
 import { useEffect, useState } from "react";
 
 const DeliveryForm = ({ fullOrder, setFullOrder, runServerless, parsedOrder, setNextButtonDisabled }) => {
   const [productionTeam, setProductionTeam] = useState([]);
+  const [isAddressEditing, setIsAddressEditing] = useState(false);
 
   // Create a handler that updates the full order
   const handleFieldChange = (fieldName, value) => {
@@ -75,16 +77,27 @@ useEffect(() => {
           }));
         }}
       />
-      {deliveryComponent.map((field) =>
-        renderField(
-          field,
-          null, // dropdownOptions
-          null, // ownerOptions
-          fullOrder?.delivery || parsedOrder?.delivery || {}, // formData
-          handleFieldChange, // setFormData function
-          null // contactValues
-        )
-      )}
+      {deliveryComponent
+        .filter((field) => !["address_line_1", "city", "state", "zip_code"].includes(field.internalName))
+        .map((field) =>
+          renderField(
+            field,
+            null, // dropdownOptions
+            null, // ownerOptions
+            fullOrder?.delivery || parsedOrder?.delivery || {}, // formData
+            handleFieldChange, // setFormData function
+            null // contactValues
+          )
+        )}
+      <Text></Text>
+      <AddressDisplay
+        address={fullOrder?.delivery || parsedOrder?.delivery || {}}
+        onFieldChange={handleFieldChange}
+        isEditing={isAddressEditing}
+        onEdit={() => setIsAddressEditing(true)}
+        onSave={() => setIsAddressEditing(false)}
+      />
+      <Button onClick={() => console.log("Full Order:", fullOrder)}>Print Order For Testing</Button>
     </>
   );
 };
