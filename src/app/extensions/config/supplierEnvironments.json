@@ -1,0 +1,35 @@
+{
+  "environments": {
+    "production": {
+      "ABC": {
+        "orderApiUrl": "https://partners.abcsupply.com/api/order/v2/orders"
+      },
+      "BEACON": {
+        "baseUrl": "https://beaconproplus.com/v1/rest/com/becn",
+        "apiSiteId": "WEB"
+      },
+      "SRS": {
+        "sourceSystem": "WEB"
+      }
+    },
+    "sandbox": {
+      "ABC": {
+        "orderApiUrl": "https://sandbox.partners.abcsupply.com/api/order/v2/orders"
+      },
+      "BEACON": {
+        "baseUrl": "https://beacon-uat.becn.com/v1/rest/com/becn",
+        "apiSiteId": "UAT"
+      },
+      "SRS": {
+        "sourceSystem": "WEB"
+      }
+    },
+    "dev": {
+      "BEACON": {
+        "baseUrl": "https://beacon-dev.becn.com/v1/rest/com/becn",
+        "apiSiteId": "DEV"
+      }
+    }
+  }
+}
+

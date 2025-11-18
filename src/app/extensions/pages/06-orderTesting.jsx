@@ -5,9 +5,11 @@ import {
   Panel,
   PanelBody,
   PanelSection,
+  Select,
   Text,
 } from "@hubspot/ui-extensions";
 import unifiedConfig from "../config/unifiedOrderConfig.json";
+import supplierEnvironments from "../config/supplierEnvironments.json";
 
 // UnifiedOrder (simple shape)
 // Required: accountNumber, branchId, fulfillmentMethod, lineItems[]
@@ -208,7 +210,20 @@ const HeaderList = ({ headers }) => {
   );
 };
 
-function toABC(order) {
+// SHAPE: Input → Filter → Transform → Store → Output → Loop
+// INPUT: environment name, supplier code
+// FILTER: validate environment exists in config
+// TRANSFORM: extract supplier config for environment
+// STORE: return config object
+// OUTPUT: supplier-specific environment config
+// LOOP: callable whenever environment changes
+function getSupplierConfig(environment, supplier) {
+  const envConfig = supplierEnvironments.environments?.[environment];
+  if (!envConfig) return {};
+  return envConfig[supplier] || {};
+}
+
+function toABC(order, envConfig = {}) {
   const ds = DeliveryMap.ABC[order.fulfillmentMethod] || "OTG";
   const appt = TimeWindowMap.ABC[order.timeWindow] || { code: "AT" };
 
@@ -293,20 +308,25 @@ function toABC(order) {
     delete body.shipTo.address;
   }
 
+  const orderApiUrl = envConfig.orderApiUrl || "https://partners.abcsupply.com/api/order/v2/orders";
+
   return {
-    url: "https://partners.abcsupply.com/api/order/v2/orders",
+    url: orderApiUrl,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify([body]),
   };
 }
 
-function toBeacon(order, cfg = { apiSiteId: "WEB" }) {
+function toBeacon(order, envConfig = {}) {
   const sm = DeliveryMap.BEACON[order.fulfillmentMethod] || "D";
   const pickupTime = TimeWindowMap.BEACON[order.timeWindow] || "Anytime";
 
+  const apiSiteId = envConfig.apiSiteId || "WEB";
+  const baseUrl = envConfig.baseUrl || "https://beaconproplus.com/v1/rest/com/becn";
+
   const body = {
-    apiSiteId: cfg.apiSiteId,
+    apiSiteId: apiSiteId,
     accountId: take(order.accountNumber, 6),
     job: {
       jobName: take(order.jobName || "", 15),
@@ -358,20 +378,22 @@ function toBeacon(order, cfg = { apiSiteId: "WEB" }) {
   };
 
   return {
-    url: "/submitOrder",
+    url: `${baseUrl}/submitOrder`,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
 }
 
-function toSRS(order, cfg = { sourceSystem: "WEB" }) {
+function toSRS(order, envConfig = {}) {
   const srsTime = TimeWindowMap.SRS[order.timeWindow] || "Anytime";
   const contact = order.contact || {};
   const addr = contact.address || {};
 
+  const sourceSystem = envConfig.sourceSystem || "WEB";
+
   const body = {
-    sourceSystem: cfg.sourceSystem,
+    sourceSystem: sourceSystem,
     customerCode: order.accountNumber,
     accountNumber: order.accountNumber,
     jobAccountNumber: Number(order.jobNumber || 0),
@@ -433,16 +455,25 @@ function toSRS(order, cfg = { sourceSystem: "WEB" }) {
   };
 }
 
-function buildRequestFromUnified(order, cfg = {}) {
+function buildRequestFromUnified(order, environment = "production") {
   if (!nonEmpty(order.accountNumber)) throw new Error("accountNumber required");
   if (!nonEmpty(order.branchId)) throw new Error("branchId required");
   if (!Array.isArray(order.lineItems) || order.lineItems.length === 0) {
     throw new Error("at least one line item required");
   }
 
-  if (order.target === "ABC") return toABC(order);
-  if (order.target === "BEACON") return toBeacon(order, cfg.beacon);
-  if (order.target === "SRS") return toSRS(order, cfg.srs);
+  if (order.target === "ABC") {
+    const envConfig = getSupplierConfig(environment, "ABC");
+    return toABC(order, envConfig);
+  }
+  if (order.target === "BEACON") {
+    const envConfig = getSupplierConfig(environment, "BEACON");
+    return toBeacon(order, envConfig);
+  }
+  if (order.target === "SRS") {
+    const envConfig = getSupplierConfig(environment, "SRS");
+    return toSRS(order, envConfig);
+  }
 
   throw new Error("Unknown target");
 }
@@ -1017,16 +1048,14 @@ const OrderTest = ({ fullOrder, parsedOrder }) => {
   const [lastResult, setLastResult] = useState(null);
   const [lastError, setLastError] = useState("");
   const [lastWarnings, setLastWarnings] = useState([]);
+  const [selectedEnvironment, setSelectedEnvironment] = useState("production");
 
   async function testPlaceOrder(target) {
     try {
       setLastError("");
       setLastWarnings([]);
       const order = buildSampleOrder(target);
-      const request = buildRequestFromUnified(order, {
-        beacon: { apiSiteId: "WEB" },
-        srs: { sourceSystem: "WEB" },
-      });
+      const request = buildRequestFromUnified(order, selectedEnvironment);
 
       setLastResult({
         target,
@@ -1063,10 +1092,7 @@ const OrderTest = ({ fullOrder, parsedOrder }) => {
         return;
       }
 
-      const request = buildRequestFromUnified(order, {
-        beacon: { apiSiteId: "WEB" },
-        srs: { sourceSystem: "WEB" },
-      });
+      const request = buildRequestFromUnified(order, selectedEnvironment);
 
       setLastResult({
         target: order.target,
@@ -1087,6 +1113,17 @@ const OrderTest = ({ fullOrder, parsedOrder }) => {
         Build vendor-specific payloads from a single unified order object. Use
         the buttons below to preview the request shapes.
       </Text>
+      <Select
+        label="Environment"
+        options={[
+          { label: "Production", value: "production" },
+          { label: "Sandbox", value: "sandbox" },
+          { label: "Dev", value: "dev" }
+        ]}
+        value={selectedEnvironment}
+        onChange={setSelectedEnvironment}
+      />
+      <Text></Text>
       <Flex direction="row" gap="small">
         <Button onClick={() => testPlaceOrder("ABC")}>Test ABC</Button>
         <Button onClick={() => testPlaceOrder("BEACON")}>Test Beacon</Button>
