@@ -29,6 +29,16 @@ const ReviewSubmit = ({
   const [crmProperties, setCrmProperties] = useState({});
   const [sumTotalPrice, setSumTotalPrice] = useState(0);
   const [orderId, setOrderId] = useState("");
+  const deliveryAddress = useMemo(
+    () =>
+      selectDeliveryAddress({
+        orderDelivery: fullOrder?.delivery,
+        parsedDelivery: parsedOrder?.delivery,
+        crmAddress: crmProperties,
+      }),
+    [fullOrder?.delivery, parsedOrder?.delivery, crmProperties]
+  );
+  const deliveryAddressText = formatAddressString(deliveryAddress);
 
   useEffect(() => {
     // console.log("This is the context", context);
@@ -201,7 +211,7 @@ const ReviewSubmit = ({
           </Flex>
           <Flex direction={"row"} gap="xs">
             <Text format={{ fontWeight: "bold" }}>Delivery Address:</Text>
-            <Text>{crmProperties.address_line_1}</Text>
+            <Text>{deliveryAddressText || "N/A"}</Text>
           </Flex>
           <Flex direction={"row"} gap="xs">
             <Text format={{ fontWeight: "bold" }}>Delivery Date:</Text>
@@ -341,3 +351,33 @@ const ReviewSubmit = ({
 };
 
 export default ReviewSubmit;
+
+// SHAPE: Input → Filter → Transform → Store → Output → Loop
+// INPUT: { orderDelivery, parsedDelivery, crmAddress }
+// FILTER: prefer non-empty values from latest order edits, then parsed payload, then CRM
+// TRANSFORM: normalize CRM fields into delivery shape
+// STORE: return the chosen delivery object
+// OUTPUT: delivery object for display/payload usage
+// LOOP: safe to call whenever any upstream source changes
+function selectDeliveryAddress({ orderDelivery, parsedDelivery, crmAddress }) {
+  if (hasAnyValue(orderDelivery)) return orderDelivery;
+  if (hasAnyValue(parsedDelivery)) return parsedDelivery;
+
+  const crmDelivery = {
+    address_line_1: crmAddress?.address_line_1,
+    city: crmAddress?.city,
+    state: crmAddress?.state,
+    zip_code: crmAddress?.zip_code,
+  };
+
+  if (hasAnyValue(crmDelivery)) return crmDelivery;
+  return {};
+}
+
+function hasAnyValue(obj = {}) {
+  return Object.values(obj || {}).some((value) => {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "string") return value.trim().length > 0;
+    return true;
+  });
+}

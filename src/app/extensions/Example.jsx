@@ -199,6 +199,24 @@ const Extension = ({
       const parsedOrder = JSON.parse(rawOrder);
       console.log("parsedOrder: ", parsedOrder);
       setParsedOrder(parsedOrder);
+      setFullOrder((prev) => {
+        const mergedDelivery = mergeDeliverySources({
+          parsedDelivery: parsedOrder?.delivery,
+          crmDefaults: dealAddressRef.current,
+        });
+
+        if (!mergedDelivery) return prev;
+        const nextDelivery = JSON.stringify(prev.delivery) === JSON.stringify(mergedDelivery)
+          ? prev.delivery
+          : mergedDelivery;
+
+        if (nextDelivery === prev.delivery) return prev;
+
+        return {
+          ...prev,
+          delivery: nextDelivery,
+        };
+      });
     } else {
       setParsedOrder(null);
     }
@@ -338,6 +356,24 @@ const Extension = ({
 };
 
 export default Extension;
+
+// SHAPE: Input → Filter → Transform → Store → Output → Loop
+// INPUT: { parsedDelivery, crmDefaults }
+// FILTER: exit if no parsed delivery present
+// TRANSFORM: hydrate parsed delivery with CRM defaults for blank fields
+// STORE: return merged delivery object for caller to persist
+// OUTPUT: delivery object or null
+// LOOP: safe to call whenever a new parsed order arrives
+function mergeDeliverySources({ parsedDelivery, crmDefaults }) {
+  if (!parsedDelivery) return null;
+
+  const { delivery } = prefillDeliveryAddress({
+    delivery: parsedDelivery,
+    crm: crmDefaults,
+  });
+
+  return delivery || null;
+}
 
 function hasAnyValue(obj = {}) {
   return Object.values(obj).some((value) => {
