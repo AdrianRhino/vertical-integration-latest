@@ -19,6 +19,21 @@ exports.main = async () => {
 
     try {
         const response = await axios(config);
+        
+        const token = response.data.access_token;
+
+        const orderConfig = {
+            method: "post",
+            url: "https://partners-sb.abcsupply.com/api/order/v2/orders",
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        };
+
+        const orderResponse = await axios(orderConfig);
+
+        console.log("Order Response:", orderResponse.data);
+
         return {
             success: true,
             message: "ABC Login Sandbox successful",
