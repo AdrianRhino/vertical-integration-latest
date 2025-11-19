@@ -67,6 +67,10 @@
   "testAuth": {
     "file": "suppliers/login/testAuth.js",
     "secrets": []
+  },
+  "abcOrderSandbox": {
+    "file": "suppliers/order/sandbox/abcOrder.js",
+    "secrets": []
   }
 } 
 }

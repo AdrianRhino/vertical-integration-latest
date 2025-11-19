@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import {
   Button,
+  ButtonRow,
   Flex,
   Panel,
   PanelBody,
   PanelSection,
   Select,
   Text,
+  hubspot,
 } from "@hubspot/ui-extensions";
 import unifiedConfig from "../config/unifiedOrderConfig.json";
 import supplierEnvironments from "../config/supplierEnvironments.json";
@@ -1106,6 +1108,33 @@ const OrderTest = ({ fullOrder, parsedOrder }) => {
     }
   }
 
+  async function placeABCSandboxOrder() {
+    try {
+      setLastError("");
+      setLastWarnings([]);
+      const order = buildSampleOrder("ABC");
+      const request = buildRequestFromUnified(order, "sandbox");
+      const orderBodyArray = JSON.parse(request.body);
+      
+      const response = await hubspot.serverless("abcOrderSandbox", {
+        parameters: {
+          orderBody: orderBodyArray,
+        },
+      });
+      console.log("ABC Sandbox order response:", response);
+      setLastResult({
+        target: "ABC",
+        order,
+        request,
+        response,
+      });
+    } catch (error) {
+      console.error("ABC Sandbox order failed", error);
+      setLastError(error.message || "Unknown error");
+      setLastResult(null);
+    }
+  }
+
   return (
     <>
       <Text>Unified Order Test</Text>
@@ -1125,10 +1154,16 @@ const OrderTest = ({ fullOrder, parsedOrder }) => {
       />
       <Text></Text>
       <Flex direction="row" gap="small">
-        <Button onClick={() => testPlaceOrder("ABC")}>Test ABC</Button>
+        <ButtonRow>
+          <Button onClick={() => testPlaceOrder("ABC")}>Test ABC</Button>
         <Button onClick={() => testPlaceOrder("BEACON")}>Test Beacon</Button>
         <Button onClick={() => testPlaceOrder("SRS")}>Test SRS</Button>
         <Button onClick={testCurrentOrder}>Build From Current Order</Button>
+        </ButtonRow>
+        <ButtonRow>
+          <Button onClick={() => placeABCSandboxOrder()}>Test ABC Sandbox Order</Button>
+        </ButtonRow>
+        
       </Flex>
       {lastError && (
         <Text style={{ color: "#c0392b" }}>Error: {lastError}</Text>
@@ -1148,22 +1183,36 @@ const OrderTest = ({ fullOrder, parsedOrder }) => {
       {lastResult && (
         <>
           <Text variant="microcopy">{`Target: ${lastResult.target}`}</Text>
-          <Text variant="microcopy">{`URL: ${lastResult.request.url}`}</Text>
-          <Text variant="microcopy">
-            {`Method: ${lastResult.request.method}`}
-          </Text>
-          <Text variant="microcopy" style={{ fontWeight: 600 }}>
-            Headers:
-          </Text>
-          <HeaderList headers={lastResult.request.headers} />
-          <Text variant="microcopy" style={{ fontWeight: 600 }}>
-            Body Preview:
-          </Text>
-          <Monospace>
-            {typeof lastResult.request.body === "string"
-              ? lastResult.request.body
-              : JSON.stringify(lastResult.request.body, null, 2)}
-          </Monospace>
+          {lastResult.request && (
+            <>
+              <Text variant="microcopy">{`URL: ${lastResult.request.url || "N/A"}`}</Text>
+              <Text variant="microcopy">
+                {`Method: ${lastResult.request.method || "N/A"}`}
+              </Text>
+              <Text variant="microcopy" style={{ fontWeight: 600 }}>
+                Headers:
+              </Text>
+              <HeaderList headers={lastResult.request.headers} />
+              <Text variant="microcopy" style={{ fontWeight: 600 }}>
+                Body Preview:
+              </Text>
+              <Monospace>
+                {typeof lastResult.request.body === "string"
+                  ? lastResult.request.body
+                  : JSON.stringify(lastResult.request.body, null, 2)}
+              </Monospace>
+            </>
+          )}
+          {lastResult.response && (
+            <>
+              <Text variant="microcopy" style={{ fontWeight: 600 }}>
+                Response:
+              </Text>
+              <Monospace>
+                {JSON.stringify(lastResult.response, null, 2)}
+              </Monospace>
+            </>
+          )}
         </>
       )}
       {!lastResult && !lastError && (
