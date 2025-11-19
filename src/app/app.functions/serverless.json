@@ -1,9 +1,5 @@
 {
   "appFunctions": {
-    "myFunc": {
-      "file": "example-function.js",
-      "secrets": []
-    },
     "getTickets": {
     "file": "getTickets.js",
     "secrets": []
@@ -63,6 +59,10 @@
   "supplierProducts": {
     "file": "suppliers/supabase/supplierProducts.js",
     "secrets": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
+  },
+  "abcLoginSandbox": {
+    "file": "suppliers/login/abcLoginSandbox.js",
+    "secrets": []
   }
 } 
 }
