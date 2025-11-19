@@ -26,6 +26,15 @@ const LoginTesting = () => {
             setAbcLoginTokenSandboxError(error);
         }
     }
+
+    const testAuth = async () => {
+        try {
+            const authResponse = await hubspot.serverless("testAuth");
+            console.log("Auth response:", authResponse);
+        } catch (error) {
+            console.error("Error in Test Auth:", error);
+        }
+    }
  
 
   return (
@@ -34,6 +43,7 @@ const LoginTesting = () => {
       <Button onClick={testABCLoginSandbox}>Login to ABC</Button>
       <Button>Login to SRS</Button>
       <Button>Login to Beacon</Button>
+      <Button onClick={testAuth}>Test Auth</Button>
     </>
   );
 };

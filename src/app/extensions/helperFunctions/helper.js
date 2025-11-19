@@ -46,6 +46,7 @@ export const deliveryComponent = [
       view: true,
       script: "",
     },
+    
     {
       label: "Customer Address Confirmation",
       type: "input",
