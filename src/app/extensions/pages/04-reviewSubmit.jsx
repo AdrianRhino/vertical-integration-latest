@@ -343,7 +343,7 @@ const ReviewSubmit = ({
               Save as Draft
             </Button>
           </ButtonRow>
-          <Button variant="secondary" onClick={() => setOrderPage(6)}>Go to Testing Panel</Button>
+          <Button variant="secondary" onClick={() => setOrderPage(8)}>Go to Testing Panel</Button>
         </>
       )}
     </>

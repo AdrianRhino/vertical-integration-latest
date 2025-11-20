@@ -16,6 +16,7 @@ import ReviewSubmit from "./pages/04-reviewSubmit";
 import OrderSuccessPage from "./pages/05-successPage";
 import OrderTest from "./pages/06-orderTesting";
 import LoginTesting from "./pages/07-loginTesting";
+import ABCSandboxOrder from "./pages/08-abcSandboxOrder";
 import { prefillDeliveryAddress } from "./helperFunctions/prefillDeliveryAddress";
 
 // Define the extension to be run within the HubSpot CRM
@@ -127,6 +128,13 @@ const Extension = ({
       case 7:
         return (
           <LoginTesting
+            fullOrder={fullOrder}
+            parsedOrder={parsedOrder}
+          />
+        );
+      case 8:
+        return (
+          <ABCSandboxOrder
             fullOrder={fullOrder}
             parsedOrder={parsedOrder}
           />
