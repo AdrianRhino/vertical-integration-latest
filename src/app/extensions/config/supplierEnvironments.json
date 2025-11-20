@@ -2,7 +2,11 @@
   "environments": {
     "production": {
       "ABC": {
-        "orderApiUrl": "https://partners.abcsupply.com/api/order/v2/orders"
+        "orderApiUrl": "https://partners.abcsupply.com/api/order/v2/orders",
+        "appointmentDefaults": {
+          "fromTime": "07:00",
+          "toTime": "17:00"
+        }
       },
       "BEACON": {
         "baseUrl": "https://beaconproplus.com/v1/rest/com/becn",
@@ -14,7 +18,11 @@
     },
     "sandbox": {
       "ABC": {
-        "orderApiUrl": "https://sandbox.partners.abcsupply.com/api/order/v2/orders"
+        "orderApiUrl": "https://sandbox.partners.abcsupply.com/api/order/v2/orders",
+        "appointmentDefaults": {
+          "fromTime": "07:00",
+          "toTime": "17:00"
+        }
       },
       "BEACON": {
         "baseUrl": "https://beacon-uat.becn.com/v1/rest/com/becn",

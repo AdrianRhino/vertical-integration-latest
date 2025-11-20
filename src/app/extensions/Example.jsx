@@ -134,7 +134,7 @@ const Extension = ({
     }
   };
 
-  const [orderPage, setOrderPage] = useState(6);
+  const [orderPage, setOrderPage] = useState(0);
   const [orderedLineItems, setOrderedLineItems] = useState([]);
   const [fullOrder, setFullOrder] = useState({});
   const [parsedOrder, setParsedOrder] = useState(null);

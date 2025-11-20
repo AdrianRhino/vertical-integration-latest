@@ -228,10 +228,13 @@ function getSupplierConfig(environment, supplier) {
 function toABC(order, envConfig = {}) {
   const ds = DeliveryMap.ABC[order.fulfillmentMethod] || "OTG";
   const appt = TimeWindowMap.ABC[order.timeWindow] || { code: "AT" };
+  const appointmentDefaults = envConfig.appointmentDefaults || {};
+  const defaultFromTime = appointmentDefaults.fromTime || "07:00";
+  const defaultToTime = appointmentDefaults.toTime || "17:00";
 
   const lines = order.lineItems.map((item, idx) => {
     const out = {
-      id: idx + 1,
+      id: String(idx + 1),
       itemNumber: item.itemCode,
       itemDescription: item.desc || "",
       orderedQty: { value: Number(item.qty || 0), uom: item.uom || "EA" },
@@ -266,8 +269,14 @@ function toABC(order, envConfig = {}) {
     deliveryAppointment: {
       instructionsTypeCode: appt.code,
       instructions: take(order.notes || "", 255),
-      fromTime: nonEmpty(order.exactFrom) ? order.exactFrom : undefined,
-      toTime: nonEmpty(order.exactTo) ? order.exactTo : undefined,
+      fromTime: take(
+        nonEmpty(order.exactFrom) ? order.exactFrom : defaultFromTime,
+        8
+      ),
+      toTime: take(
+        nonEmpty(order.exactTo) ? order.exactTo : defaultToTime,
+        8
+      ),
       timeZoneCode: undefined,
     },
     currency: "USD",

@@ -20,6 +20,11 @@ exports.main = async (context = {}) => {
 
     try {
         const response = await axios(config);
+    if (response.data.access_token) {
+            console.log("ABC Access granted");
+        } else {
+            console.error("No ABC Access Token found");
+        }
         const abcAccessToken = response.data.access_token;
         const orderConfig = {
             method: "post",
@@ -38,15 +43,27 @@ exports.main = async (context = {}) => {
             data: orderResponse.data,
         };
     } catch (error) {
-        console.error("Error in ABC Order:", error.message);
-        console.error("Error response:", error.response?.data);
-        console.error("Error status:", error.response?.status);
-        console.error("Error config:", error.config);
+        const status = error.response?.status;
+        const statusText = error.response?.statusText;
+        const headers = error.response?.headers;
+        const data = error.response?.data;
+      
+        console.error("Error in ABC Order:", error.message ?? "unknown");
+        console.error("Status:", status, statusText);
+        console.error("Headers:", JSON.stringify(headers, null, 2));
+        console.error("Response body:", JSON.stringify(data, null, 2));
+        console.error("Request config:", {
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+          data: error.config?.data,
+        });
+      
         return {
-            success: false,
-            message: "Order placement failed",
-            error: error.response?.data || error.message,
-            status: error.response?.status,
+          success: false,
+          message: "Order placement failed",
+          error: data || error.message,
+          status,
         };
-    }
+      }
 }
