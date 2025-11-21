@@ -310,7 +310,7 @@ const Extension = ({
       
       {renderPage(orderPage)}
       <Text></Text>
-      <Text>Test ABC Sandbox Order Test</Text>
+
       <Divider />
       <Text></Text>
       <ButtonRow>
