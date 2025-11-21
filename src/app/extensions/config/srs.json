@@ -1,0 +1,54 @@
+{
+  "supplier": "SRS",
+  "fieldMappings": {
+    "accountNumber": "customerCode",
+    "branchId": "branchCode",
+    "poNumber": "poDetails.poNumber",
+    "jobName": "shipTo.name",
+    "jobNumber": "jobAccountNumber",
+    "delivery.date": "poDetails.expectedDeliveryDate",
+    "delivery.timeCode": "poDetails.expectedDeliveryTime",
+    "delivery.method": "poDetails.shippingMethod",
+    "delivery.address.line1": "shipTo.addressLine1",
+    "delivery.address.line2": "shipTo.addressLine2",
+    "delivery.address.line3": "shipTo.addressLine3",
+    "delivery.address.city": "shipTo.city",
+    "delivery.address.state": "shipTo.state",
+    "delivery.address.postalCode": "shipTo.zipCode",
+    "delivery.contact.name": "customerContactInfo.customerContactName",
+    "delivery.contact.phone": "customerContactInfo.customerContactPhone",
+    "delivery.contact.email": "customerContactInfo.customerContactEmail",
+    "delivery.notes": "notes"
+  },
+  "lineItemMappings": {
+    "sku": "customerItem",
+    "description": "productName",
+    "qty": "quantity",
+    "uom": "uom",
+    "price": "price",
+    "productId": "productId"
+  },
+  "defaults": {
+    "sourceSystem": "WEB",
+    "orderType": "WHSE",
+    "jobAccountNumber": 0
+  },
+  "wrapper": {
+    "type": "object"
+  },
+  "enumMappings": {
+    "delivery.method": {
+      "Delivery": "Ground Drop",
+      "Pickup": "Customer Pickup"
+    },
+    "delivery.timeCode": {
+      "Anytime": "Anytime",
+      "Morning": "Morning",
+      "Afternoon": "Afternoon",
+      "Special": "Special",
+      "Exact": "Special",
+      "Range": "Special"
+    }
+  }
+}
+

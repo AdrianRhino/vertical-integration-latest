@@ -1,6 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button, Text, Flex, hubspot } from "@hubspot/ui-extensions";
-import supplierEnvironments from "../config/supplierEnvironments.json";
+import { inputStage } from "../pipeline/input.js";
+import { filterStage } from "../pipeline/filter.js";
+import { checkInvariants } from "../invariants/checkInvariants.js";
+import { getAdapter } from "../adapters/adapterRegistry.js";
+import { logOrderSubmission, logInvariantViolation } from "../utils/logger.js";
 
 // SHAPE: Input → Filter → Transform → Store → Output → Loop
 // INPUT: fullOrder, parsedOrder
@@ -11,54 +15,103 @@ import supplierEnvironments from "../config/supplierEnvironments.json";
 // LOOP: display result, allow retry
 
 const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
 
-const branchID = "461";
-const shipToNumber = "2063975-2";
-const requestId = "Test-Order-123";
-const purpose = "estimating";
-const lines = fullOrder.fullOrderItems.map(item => ({
-    id: item.id,
-    itemNumber: item.sku,
-    quantity: item.qty,
-    uom: item.uom,
-}));
+  const placeABCSandboxOrder = async () => {
+    try {
+      if (!fullOrder || Object.keys(fullOrder || {}).length === 0) {
+        throw new Error("No active order found. Start an order first.");
+      }
 
-const formatABCOrder = (order) => {
-    return {
-        branchID: order.branchID,
-        shipToNumber: order.shipToNumber,
-        requestId: order.requestId,
-        purpose: order.purpose,
-        lines: order.lines,
-    };
-};
+      setIsSubmitting(true);
+      setError("");
+      setResult(null);
 
-const formABCOrder = () => {
-    if (fullOrder && parsedOrder) {
-        console.log("Full Order:", fullOrder);
-        console.log("Parsed Order:", parsedOrder);
-        const lines = fullOrder.fullOrderItems.map(item => ({
-            id: item.id,
-            itemNumber: item.sku,
-            quantity: item.qty || 1,
-            uom: item.uom || "EA",
-        }));
-        const abcOrder = formatABCOrder({
-            branchID,
-            shipToNumber,
-            requestId,
-            purpose,
-            lines,
-        });
-        console.log("ABC Order:", abcOrder);
+      // Input stage: Build InternalOrder
+      const { order, errors: inputErrors, warnings: inputWarnings } = inputStage(
+        fullOrder,
+        parsedOrder,
+        {}
+      );
+
+      if (inputErrors.length > 0) {
+        throw new Error(inputErrors.join("\n"));
+      }
+
+      // Filter stage: Validate and sanitize
+      const { order: filteredOrder, errors: filterErrors, warnings: filterWarnings } = filterStage(order);
+
+      if (filterErrors.length > 0) {
+        throw new Error(filterErrors.join("\n"));
+      }
+
+      // Check invariants
+      const invariantCheck = checkInvariants(filteredOrder, "ABC");
+      if (!invariantCheck.valid) {
+        const errorMessages = invariantCheck.errors.map(e => e.message).join("\n");
+        throw new Error(errorMessages);
+      }
+
+      // Get adapter and transform
+      const adapter = getAdapter("ABC", "sandbox");
+      const payload = adapter.transform(filteredOrder);
+
+      // Submit via serverless function
+      const response = await hubspot.serverless("abcOrderSandbox", {
+        parameters: {
+          orderBody: payload,
+        },
+      });
+
+      console.log("ABC Sandbox Order Response:", response);
+      
+      // Log submission
+      logOrderSubmission(filteredOrder, "ABC", response);
+      
+      setResult(response);
+    } catch (err) {
+      console.error("ABC Sandbox order failed:", err);
+      setError(err?.message || "Failed to place ABC sandbox order.");
+      
+      // Log error
+      if (fullOrder) {
+        logInvariantViolation(
+          fullOrder,
+          "ABC",
+          { field: "order", message: err.message },
+          null,
+          null
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-};
+  };
 
   return (
     <>
-     <Text>ABC Sandbox Order</Text>
-     <Button onClick={() => console.log("Order:", fullOrder || parsedOrder || "No order found")}>Test ABC Sandbox Order</Button>
-     <Button onClick={() => formABCOrder()}>Form ABC Order</Button>
+      <Text>ABC Sandbox Order</Text>
+      <Flex direction="column" gap="small">
+        <Button
+          disabled={isSubmitting}
+          onClick={placeABCSandboxOrder}
+        >
+          {isSubmitting ? "Submitting..." : "Place ABC Sandbox Order"}
+        </Button>
+        {error && (
+          <Text style={{ color: "#c0392b" }}>Error: {error}</Text>
+        )}
+        {result && (
+          <Text
+            variant="microcopy"
+            style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}
+          >
+            {JSON.stringify(result, null, 2)}
+          </Text>
+        )}
+      </Flex>
     </>
   );
 };

@@ -1,0 +1,56 @@
+{
+  "supplier": "ABC",
+  "fieldMappings": {
+    "accountNumber": "shipTo.number",
+    "branchId": "branchNumber",
+    "poNumber": "purchaseOrder",
+    "jobName": "shipTo.name",
+    "delivery.date": "dates.deliveryRequestedFor",
+    "delivery.timeCode": "deliveryAppointment.instructionsTypeCode",
+    "delivery.fromTime": "deliveryAppointment.fromTime",
+    "delivery.toTime": "deliveryAppointment.toTime",
+    "delivery.notes": "deliveryAppointment.instructions",
+    "delivery.address.line1": "shipTo.address.line1",
+    "delivery.address.line2": "shipTo.address.line2",
+    "delivery.address.line3": "shipTo.address.line3",
+    "delivery.address.city": "shipTo.address.city",
+    "delivery.address.state": "shipTo.address.state",
+    "delivery.address.postalCode": "shipTo.address.postal",
+    "delivery.contact.name": "shipTo.contacts[0].name",
+    "delivery.contact.email": "shipTo.contacts[0].email",
+    "delivery.contact.phone": "shipTo.contacts[0].phones[0].number"
+  },
+  "lineItemMappings": {
+    "sku": "itemNumber",
+    "description": "itemDescription",
+    "qty": "orderedQty.value",
+    "uom": "orderedQty.uom",
+    "price": "unitPrice.value"
+  },
+  "defaults": {
+    "delivery.fromTime": "07:00",
+    "delivery.toTime": "17:00",
+    "delivery.timeCode": "AT",
+    "currency": "USD",
+    "typeCode": "SO",
+    "deliveryService": "OTG"
+  },
+  "wrapper": {
+    "type": "array"
+  },
+  "enumMappings": {
+    "delivery.method": {
+      "Delivery": "OTG",
+      "Pickup": "CPU"
+    },
+    "delivery.timeCode": {
+      "Anytime": "AT",
+      "Morning": "AM",
+      "Afternoon": "PM",
+      "Special": "AT",
+      "Exact": "ST",
+      "Range": "TR"
+    }
+  }
+}
+

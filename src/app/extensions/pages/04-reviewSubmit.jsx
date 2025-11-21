@@ -15,6 +15,9 @@ import {
   hubspot,
 } from "@hubspot/ui-extensions";
 import { moneyFormatter, formatAddressString } from "../helperFunctions/helper";
+import { inputStage } from "../pipeline/input.js";
+import { filterStage } from "../pipeline/filter.js";
+import { checkInvariants } from "../invariants/checkInvariants.js";
 
 const ReviewSubmit = ({
   fullOrder,
@@ -67,10 +70,24 @@ const ReviewSubmit = ({
   }, [orderId, setFullOrder]);
 
   const buildOrderPayload = () => {
+    // Use new pipeline to build InternalOrder, then convert back to legacy format
+    // This preserves existing behavior while using new architecture
+    const { order: internalOrder, errors, warnings } = inputStage(
+      fullOrder,
+      parsedOrder,
+      {}
+    );
+
+    // Convert InternalOrder back to legacy format for HubSpot storage
     const base = parsedOrder || {};
     const mergedDelivery = {
       ...(base.delivery || {}),
       ...(fullOrder.delivery || {}),
+      // Map from InternalOrder if available
+      address_line_1: internalOrder.delivery?.address?.line1 || base.delivery?.address_line_1 || fullOrder.delivery?.address_line_1 || "",
+      city: internalOrder.delivery?.address?.city || base.delivery?.city || fullOrder.delivery?.city || "",
+      state: internalOrder.delivery?.address?.state || base.delivery?.state || fullOrder.delivery?.state || "",
+      zip_code: internalOrder.delivery?.address?.postalCode || base.delivery?.zip_code || fullOrder.delivery?.zip_code || "",
     };
 
     const mergedItems =
@@ -91,7 +108,7 @@ const ReviewSubmit = ({
     return {
       ...base,
       ...fullOrder,
-      supplier: fullOrder.supplier || base.supplier || "",
+      supplier: internalOrder.supplier || fullOrder.supplier || base.supplier || "",
       ticket: fullOrder.ticket || base.ticket || "",
       template: fullOrder.template || base.template || "",
       orderType: fullOrder.orderType || base.orderType || "",
