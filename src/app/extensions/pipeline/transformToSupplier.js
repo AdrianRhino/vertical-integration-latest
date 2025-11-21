@@ -68,9 +68,33 @@ export function transformToSupplier(order, environment = "production") {
               supplierItem[parent] = {};
             }
             supplierItem[parent][child] = value;
+            
+            // For ABC, if this is unitPrice.value, ensure instructions field exists
+            if (supplier === "ABC" && parent === "unitPrice" && child === "value") {
+              if (!supplierItem[parent].instructions) {
+                supplierItem[parent].instructions = "";
+              }
+              if (!supplierItem[parent].uom) {
+                supplierItem[parent].uom = item.uom || "EA";
+              }
+            }
           } else {
             supplierItem[supplierField] = value;
           }
+        }
+      }
+      
+      // For ABC, ensure orderedQty structure exists
+      if (supplier === "ABC") {
+        if (!supplierItem.orderedQty) {
+          supplierItem.orderedQty = {
+            value: item.qty || 0,
+            uom: item.uom || "EA",
+          };
+        }
+        // Ensure itemDescription exists (even if empty)
+        if (supplierItem.itemDescription === undefined) {
+          supplierItem.itemDescription = item.description || "";
         }
       }
       
@@ -89,6 +113,15 @@ export function transformToSupplier(order, environment = "production") {
   
   // Handle special supplier-specific structures
   if (supplier === "ABC") {
+    // ABC requires purchaseOrder (even if empty, use "N/A")
+    if (!payload.purchaseOrder) {
+      payload.purchaseOrder = order.poNumber || "N/A";
+    }
+    // Truncate to 20 chars
+    if (payload.purchaseOrder && payload.purchaseOrder.length > 20) {
+      payload.purchaseOrder = payload.purchaseOrder.substring(0, 20);
+    }
+    
     // ABC requires deliveryAppointment structure
     if (!payload.deliveryAppointment) {
       payload.deliveryAppointment = {};
@@ -101,6 +134,14 @@ export function transformToSupplier(order, environment = "production") {
     }
     if (!payload.deliveryAppointment.instructionsTypeCode) {
       payload.deliveryAppointment.instructionsTypeCode = defaults["delivery.timeCode"] || "AT";
+    }
+    // ABC requires instructions field (even if empty)
+    if (payload.deliveryAppointment.instructions === undefined) {
+      payload.deliveryAppointment.instructions = order.delivery?.notes || "";
+    }
+    // Truncate to 255 chars
+    if (payload.deliveryAppointment.instructions && payload.deliveryAppointment.instructions.length > 255) {
+      payload.deliveryAppointment.instructions = payload.deliveryAppointment.instructions.substring(0, 255);
     }
     
     // ABC requires currency
@@ -125,8 +166,21 @@ export function transformToSupplier(order, environment = "production") {
       payload.requestId = `req-${Date.now()}`;
     }
     
-    // ABC wraps contacts in array (if contact has email)
+    // ABC requires shipTo.address with all required fields (even if empty)
     if (payload.shipTo) {
+      if (!payload.shipTo.address) {
+        payload.shipTo.address = {};
+      }
+      // Ensure all required address fields exist (even if empty)
+      if (payload.shipTo.address.line1 === undefined) payload.shipTo.address.line1 = "";
+      if (payload.shipTo.address.line2 === undefined) payload.shipTo.address.line2 = "";
+      if (payload.shipTo.address.line3 === undefined) payload.shipTo.address.line3 = "";
+      if (payload.shipTo.address.city === undefined) payload.shipTo.address.city = "";
+      if (payload.shipTo.address.state === undefined) payload.shipTo.address.state = "";
+      if (payload.shipTo.address.postal === undefined) payload.shipTo.address.postal = "";
+      if (payload.shipTo.address.country === undefined) payload.shipTo.address.country = "USA";
+      
+      // ABC wraps contacts in array (if contact has email)
       if (!payload.shipTo.contacts) {
         payload.shipTo.contacts = [];
       } else if (!Array.isArray(payload.shipTo.contacts)) {
@@ -158,13 +212,23 @@ export function transformToSupplier(order, environment = "production") {
       }
     }
     
-    // Remove empty address if all fields are empty
-    if (payload.shipTo && payload.shipTo.address) {
-      const address = payload.shipTo.address;
-      const isEmpty = !address.line1 && !address.city && !address.state && !address.postal;
-      if (isEmpty) {
-        delete payload.shipTo.address;
-      }
+    // Ensure unitPrice has instructions field for all line items
+    if (payload.lines && Array.isArray(payload.lines)) {
+      payload.lines.forEach(line => {
+        if (line.unitPrice && typeof line.unitPrice === "object") {
+          // unitPrice already exists as object, ensure instructions field
+          if (line.unitPrice.instructions === undefined) {
+            line.unitPrice.instructions = "";
+          }
+        } else if (line.unitPrice !== undefined) {
+          // unitPrice is a value, convert to object structure
+          line.unitPrice = {
+            value: line.unitPrice,
+            uom: line.orderedQty?.uom || "EA",
+            instructions: "",
+          };
+        }
+      });
     }
   }
   
