@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Text, Flex, hubspot } from "@hubspot/ui-extensions";
+import { Button, Text, Flex, hubspot, Divider } from "@hubspot/ui-extensions";
 import { inputStage } from "../pipeline/input.js";
 import { filterStage } from "../pipeline/filter.js";
 import { checkInvariants } from "../invariants/checkInvariants.js";
@@ -107,6 +107,20 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
     }
   };
 
+  const testSRSOrder = async () => {
+    try {
+      const response = await hubspot.serverless("srsOrderSandbox", {
+        parameters: {
+          orderBody: null,
+        },
+      });
+      console.log("SRS Sandbox Order Response:", response);
+    } catch (err) {
+      console.error("SRS Sandbox order failed:", err);
+      setError(err?.message || "Failed to place SRS sandbox order.");
+    }
+  };
+
   return (
     <>
       <Text>ABC Sandbox Order</Text>
@@ -128,6 +142,10 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
             {JSON.stringify(result, null, 2)}
           </Text>
         )}
+
+        <Divider />
+
+        <Button onClick={testSRSOrder}>Test SRS Sandbox Order</Button>
       </Flex>
     </>
   );

@@ -71,6 +71,10 @@
   "abcOrderSandbox": {
     "file": "suppliers/order/sandbox/abcOrder.js",
     "secrets": []
+  }, 
+  "srsOrderSandbox": {
+    "file": "suppliers/order/sandbox/srsOrder.js",
+    "secrets": []
   }
 } 
 }
