@@ -21,13 +21,26 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
 
   const placeABCSandboxOrder = async () => {
     try {
-      if (!fullOrder || Object.keys(fullOrder || {}).length === 0) {
-        throw new Error("No active order found. Start an order first.");
-      }
-
       setIsSubmitting(true);
       setError("");
       setResult(null);
+
+      // TEMPORARY: Bypass frontend validation to test hardcoded order in backend
+      // The backend has a hardcoded order for format testing
+      console.log("=== Bypassing frontend validation - testing hardcoded backend order ===");
+      
+      // Submit via serverless function (backend will use hardcoded order)
+      const response = await hubspot.serverless("abcOrderSandbox", {
+        parameters: {
+          orderBody: null, // Backend will use hardcoded order
+        },
+      });
+
+      // TODO: Once hardcoded order works, restore validation below:
+      /*
+      if (!fullOrder || Object.keys(fullOrder || {}).length === 0) {
+        throw new Error("No active order found. Start an order first.");
+      }
 
       // Input stage: Build InternalOrder
       const { order, errors: inputErrors, warnings: inputWarnings } = inputStage(
@@ -64,11 +77,15 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
           orderBody: payload,
         },
       });
+      */
 
       console.log("ABC Sandbox Order Response:", response);
       
-      // Log submission
-      logOrderSubmission(filteredOrder, "ABC", response);
+      // Log submission (using hardcoded order for now)
+      // TODO: Restore filteredOrder logging when validation is re-enabled
+      if (fullOrder) {
+        logOrderSubmission(fullOrder, "ABC", response);
+      }
       
       setResult(response);
     } catch (err) {
