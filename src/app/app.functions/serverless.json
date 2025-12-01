@@ -75,6 +75,10 @@
   "srsOrderSandbox": {
     "file": "suppliers/order/sandbox/srsOrder.js",
     "secrets": []
+  },
+  "beaconOrderSandbox": {
+    "file": "suppliers/order/sandbox/beaconOrder.js",
+    "secrets": []
   }
 } 
 }

@@ -20,6 +20,9 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [srsResult, setSrsResult] = useState(null);
+  const [beaconResult, setBeaconResult] = useState(null);
+  const [isSubmittingBeacon, setIsSubmittingBeacon] = useState(false);
+  const [errorBeacon, setErrorBeacon] = useState("");
 
   const placeABCSandboxOrder = async () => {
     try {
@@ -131,6 +134,28 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
     }
   };
 
+  const placeBeaconSandboxOrder = async () => {
+    try {
+      setIsSubmittingBeacon(true);
+      setErrorBeacon("");
+      setBeaconResult(null);
+      
+      const response = await hubspot.serverless("beaconOrderSandbox", {
+        parameters: {
+          orderBody: null,
+        },
+      });
+      console.log("Beacon Sandbox Order Response:", response);
+      setBeaconResult(response);
+      
+    } catch (err) {
+      console.error("Beacon Sandbox order failed:", err);
+      setErrorBeacon(err?.message || "Failed to place Beacon sandbox order.");
+    } finally {
+      setIsSubmittingBeacon(false);
+    }
+  };
+
   return (
     <>
       <Text>ABC Sandbox Order</Text>
@@ -167,6 +192,25 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
             style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}
           >
             {JSON.stringify(srsResult, null, 2)}
+          </Text>
+        )}
+
+        <Divider />
+        <Button
+          disabled={isSubmittingBeacon}
+          onClick={placeBeaconSandboxOrder}
+        >
+          {isSubmittingBeacon ? "Submitting..." : "Place Beacon Sandbox Order"}
+        </Button>
+        {errorBeacon && (
+          <Text style={{ color: "#c0392b" }}>Error: {errorBeacon}</Text>
+        )}
+        {beaconResult && (
+          <Text
+            variant="microcopy"
+            style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}
+          >
+            {JSON.stringify(beaconResult, null, 2)}
           </Text>
         )}
       </Flex>
