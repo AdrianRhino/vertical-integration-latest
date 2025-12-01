@@ -16,8 +16,10 @@ import { logOrderSubmission, logInvariantViolation } from "../utils/logger.js";
 
 const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingSRS, setIsSubmittingSRS] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [srsResult, setSrsResult] = useState(null);
 
   const placeABCSandboxOrder = async () => {
     try {
@@ -109,15 +111,23 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
 
   const testSRSOrder = async () => {
     try {
+      setIsSubmittingSRS(true);
+      setError("");
+      setSrsResult(null);
+      
+      console.log("Submitting SRS order...");
       const response = await hubspot.serverless("srsOrderSandbox", {
         parameters: {
           orderBody: null,
         },
       });
       console.log("SRS Sandbox Order Response:", response);
+      setSrsResult(response);
     } catch (err) {
       console.error("SRS Sandbox order failed:", err);
       setError(err?.message || "Failed to place SRS sandbox order.");
+    } finally {
+      setIsSubmittingSRS(false);
     }
   };
 
@@ -145,7 +155,20 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
 
         <Divider />
 
-        <Button onClick={testSRSOrder}>Test SRS Sandbox Order</Button>
+        <Button
+          disabled={isSubmittingSRS}
+          onClick={testSRSOrder}
+        >
+          {isSubmittingSRS ? "Submitting order..." : "Test SRS Sandbox Order"}
+        </Button>
+        {srsResult && (
+          <Text
+            variant="microcopy"
+            style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}
+          >
+            {JSON.stringify(srsResult, null, 2)}
+          </Text>
+        )}
       </Flex>
     </>
   );
