@@ -5,6 +5,9 @@ exports.main = async (context = {}) => {
    const abcClientId = process.env.ABCClientSandbox;
    const abcClientSecret = process.env.ABCClientSecretSandbox;
 
+   // ABCClientSandbox='0oa21mviomnaC6L6H0h8'
+   // ABCClientSecretSandbox='BZAXkpWAxVqxvAN11J3uHaTe0Q4CtCYw2fnRvigh48VpGmnuZfKgMvt8aBBG-EJR'
+
    const abcBasic64AuthKey = Buffer.from(`${abcClientId}:${abcClientSecret}`).toString('base64');
 
    const config = {
@@ -29,19 +32,154 @@ exports.main = async (context = {}) => {
     }
 
     const token = response.data.access_token;
-    const grantedScopes = response.data?.scope ? response.data.scope.split(' ') : [];
-    const hasOrderWrite = grantedScopes.includes('order.write');
-    const hasOrderRead = grantedScopes.includes('order.read');
+    console.log("Token:", token ? "✓" : "✗");
+
+    const productTestResponse = await axios({
+      method: "get",
+      url: "https://partners-sb.abcsupply.com/api/product/v1/items?itemsPerPage=1&pageNumber=1&embed=branches",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      timeout: 30000
+    });
+
+    console.log("Product Test Response:", productTestResponse.data);
+
+    const orderTestResponse = await axios({
+      method: "post",
+      url: "https://partners-sb.abcsupply.com/api/order/v2/orders",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      data: [
+        {
+            "requestId":  "12345", 
+            "purchaseOrder": "999999-9",  
+            "branchNumber": "461", 
+            "deliveryService": "OTG",
+            "typeCode": "SO",
+            "dates": {
+                "deliveryRequestedFor": "2026-03-05"
+            },
+            "deliveryAppointment": {   
+                "instructionsTypeCode": "AT",  
+                "instructions": "Please leave in driveway",
+                "fromTime": "10:00", 
+                "toTime": "11:00",  
+                "timeZoneCode": "CT"  
+            },
+            "currency": "USD",
+            "shipTo": {
+                "name": "Test Account",
+                "number": "855708", 
+                "address": { 
+                    "line1": "123 Main St",
+                    "line2": "Dock 123",
+                    "line3": "Bldg. 1 Section 2",
+                    "city": "Chicago",
+                    "state": "IL",
+                    "postal": "60661",
+                    "country": "USA"
+                },
+                "contacts": [  
+                    {
+                        "name": "John Doe",
+                        "functionCode": "SM", 
+                        "email": "john.doe@email.com",
+                        "phones": [
+                            {
+                                "number": "8882221111",
+                                "type": "MOBILE", 
+                                "ext": ""
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Jane Doe",
+                        "functionCode": "DC",
+                        "email": "jane.doe@email.com",
+                        "phones": [
+                            {
+                                "number": "8882221112",
+                                "type": "MOBILE",
+                                "ext": ""
+                            },
+                            {
+                                "number": "8882221113",
+                                "type": "WORK",
+                                "ext": "1234"
+                            },
+                            {
+                                "number": "8882221114",
+                                "type": "FAX",
+                                "ext": ""
+                            }
+                        ]
+                    },
+                    {
+                        "name": "Joe Doe",
+                        "functionCode": "CB",
+                        "email": "joe.doe@email.com",
+                        "phones": [
     
-    console.log("Token obtained | Scopes:", hasOrderWrite && hasOrderRead ? "✓" : "✗", "| Granted:", grantedScopes.join(', '));
+                        ]
+                    }
+                ]
+            },
+            "orderComments": [  
+                {
+                    "code": "H", 
+                    "description": "Order header comment here" 
+                },
+                {
+                    "code": "F",
+                    "description": "Order footer comment here"
+                },
+                {
+                    "code": "D",
+                    "description": "Order detail comment here"
+                }                    
+            ],        
+            "lines": [
+                { 
+                    "id": "1", 
+                    "itemNumber": "34RGPT3HVC", 
+                    "itemDescription": `Royal Building Products Triple 3-1/3" x 12' Hidden Vent Vinyl Soffit`,
+                    "dimensions": { 
+                        "length": {
+                            "uom": "ft",
+                            "value": 12
+                        }
+                    }, 
+                    "orderedQty": { 
+                        "value": 3,
+                        "uom": "SQ"
+                    },
+                    "unitPrice": {  
+                        "value": 24.59,
+                        "uom": "SQ",
+                        "instructions" : "Quote #123456"
+                    },
+                    "comments": 
+                    {
+                        "code": "D", 
+                        "description": "Line comment text here"
+                    }                   
+                },
+          ]
+       }
+    ]
+    })
+
+    console.log("Order Test Response:", orderTestResponse.data);
+
     
-    if (!hasOrderWrite || !hasOrderRead) {
-      return {
-        success: false,
-        message: "Token missing required scopes",
-        error: `Missing scopes: order.write=${hasOrderWrite}, order.read=${hasOrderRead}`,
-        status: 401
-      };
+    return {
+      success: true,
+      message: "Product Test Response",
+      data: productTestResponse.data
     }
     
     console.log("Placing order...");
