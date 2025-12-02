@@ -53,79 +53,80 @@ exports.main = async (context = {}) => {
     console.log("Placing Beacon sandbox order...");
 
     try {
+        // Dev-only: bypass SSL validation for beacon-dev.becn.com
+        const httpsAgent = new https.Agent({
+            rejectUnauthorized: false, // ⚠️ DEV ONLY – do NOT use this in prod
+        });
+    
         // Step 1: Authenticate and get cookies
         const beaconUsername = process.env.beaconUsername;
         const beaconPassword = process.env.beaconPass;
-
+    
         if (!beaconUsername || !beaconPassword) {
             return {
                 success: false,
                 message: "Beacon credentials not configured",
-                error: "Missing beaconUsername or beaconPass environment variables"
+                error: "Missing beaconUsername or beaconPass environment variables",
             };
         }
-
+    
         const loginPayload = {
             username: beaconUsername,
             password: beaconPassword,
             siteId: "homeSite",
             persistentLoginType: "RememberMe",
             userAgent: "desktop",
-            apiSiteId: "UAT" // UAT for sandbox/testing
+            apiSiteId: "UAT", // UAT for sandbox/testing
         };
-
+    
         const loginUrl = "https://beacon-dev.becn.com/v1/rest/com/becn/login";
-        
-        // Create axios instance with SSL bypass for dev environment (testing only)
-        // Note: Cannot use wrapped client with custom HTTPS agent, so use separate instance
-        const axiosInstance = createAxiosInstance(loginUrl);
-        
-        console.log("Authenticating with Beacon...");
-        console.log("Login URL:", loginUrl);
-        console.log("Axios instance type:", axiosInstance === axios ? "default axios" : "custom instance");
-        console.log("HTTPS Agent configured:", !!axiosInstance.defaults?.httpsAgent);
-        
-        // Use the appropriate axios instance (with SSL bypass for dev, regular for prod)
-        // Pass config directly to ensure HTTPS agent is used
-        console.log("Making request to:", loginUrl);
-        const loginResponse = await axiosInstance({
+    
+        const loginResponse = await axios({
             method: "post",
             url: loginUrl,
             data: loginPayload,
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             },
             timeout: 30000,
-            // Explicitly set httpsAgent in request config as well
-            httpsAgent: axiosInstance.defaults?.httpsAgent || undefined
+            httpsAgent, // 👈 this is the key addition
         });
-
-    console.log("Login Response:", loginResponse.data);
-    return {
-        success: true,
-        message: "Beacon Login successful",
-        loginResponse: loginResponse.data
-    };
-
+    
+        return {
+            success: true,
+            message: "Beacon Login successful",
+            loginResponse: loginResponse.data,
+        };
+    
     } catch (error) {
         // Enhanced error logging for SSL/TLS issues
         const errorMessage = error.message || "Unknown error";
-        const isSslError = errorMessage.includes("TLS") || 
-                          errorMessage.includes("SSL") || 
-                          errorMessage.includes("certificate") ||
-                          errorMessage.includes("socket disconnected");
-        
+        const isSslError =
+            errorMessage.includes("TLS") ||
+            errorMessage.includes("SSL") ||
+            errorMessage.includes("certificate") ||
+            errorMessage.includes("socket disconnected");
+    
         if (isSslError) {
             console.error("SSL/TLS Error detected:", errorMessage);
-            console.error("If using dev URL, ensure SSL bypass is configured correctly");
+            console.error(
+                "If using dev URL, ensure SSL bypass is configured correctly"
+            );
         }
-        
-        console.error("Error during Beacon order:", error.response?.data || errorMessage);
+    
+        console.error(
+            "Error during Beacon order:",
+            error.response?.data || errorMessage
+        );
+    
         return {
             success: false,
             message: "Beacon order failed",
             error: error.response?.data || errorMessage,
-            ...(isSslError && { sslError: true, note: "SSL/TLS connection issue detected" })
+            ...(isSslError && {
+                sslError: true,
+                note: "SSL/TLS connection issue detected",
+            }),
         };
     }
 }

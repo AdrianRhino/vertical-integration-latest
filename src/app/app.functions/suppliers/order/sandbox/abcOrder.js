@@ -46,134 +46,58 @@ exports.main = async (context = {}) => {
 
     console.log("Product Test Response:", productTestResponse.data);
 
-    const orderTestResponse = await axios({
-      method: "post",
-      url: "https://partners-sb.abcsupply.com/api/order/v2/orders",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+    const payload = [
+      {
+        requestId: "sandbox-test-1",
+        purchaseOrder: "TEST-PO-1",
+        branchNumber: "461",          // or whatever sandbox branch they gave you
+        deliveryService: "OTG",
+        typeCode: "SO",
+        dates: { deliveryRequestedFor: "2026-03-05" },
+        deliveryAppointment: {
+          instructionsTypeCode: "AT",
+          instructions: "Sandbox test order",
+          fromTime: "10:00",
+          toTime: "11:00",
+          timeZoneCode: "CT",
+        },
+        currency: "USD",
+        shipTo: {
+          name: "Sandbox Test",
+          number: "855708",        // or a known sandbox ship-to
+          address: {
+            line1: "123 Main St",
+            line2: "",
+            line3: "",
+            city: "Chicago",
+            state: "IL",
+            postal: "60661",
+            country: "USA",
+          },
+          contacts: [],
+        },
+        orderComments: [],
+        lines: [
+          {
+            id: "1",
+            itemNumber: "34RGPT3HVC",  // from your product test response
+            orderedQty: { value: 1, uom: "EA" },
+            unitPrice: { value: 1.0, uom: "EA", instructions: "Sandbox test" },
+          },
+        ],
       },
-      data: [
-        {
-            "requestId":  "12345", 
-            "purchaseOrder": "999999-9",  
-            "branchNumber": "461", 
-            "deliveryService": "OTG",
-            "typeCode": "SO",
-            "dates": {
-                "deliveryRequestedFor": "2026-03-05"
-            },
-            "deliveryAppointment": {   
-                "instructionsTypeCode": "AT",  
-                "instructions": "Please leave in driveway",
-                "fromTime": "10:00", 
-                "toTime": "11:00",  
-                "timeZoneCode": "CT"  
-            },
-            "currency": "USD",
-            "shipTo": {
-                "name": "Test Account",
-                "number": "855708", 
-                "address": { 
-                    "line1": "123 Main St",
-                    "line2": "Dock 123",
-                    "line3": "Bldg. 1 Section 2",
-                    "city": "Chicago",
-                    "state": "IL",
-                    "postal": "60661",
-                    "country": "USA"
-                },
-                "contacts": [  
-                    {
-                        "name": "John Doe",
-                        "functionCode": "SM", 
-                        "email": "john.doe@email.com",
-                        "phones": [
-                            {
-                                "number": "8882221111",
-                                "type": "MOBILE", 
-                                "ext": ""
-                            }
-                        ]
-                    },
-                    {
-                        "name": "Jane Doe",
-                        "functionCode": "DC",
-                        "email": "jane.doe@email.com",
-                        "phones": [
-                            {
-                                "number": "8882221112",
-                                "type": "MOBILE",
-                                "ext": ""
-                            },
-                            {
-                                "number": "8882221113",
-                                "type": "WORK",
-                                "ext": "1234"
-                            },
-                            {
-                                "number": "8882221114",
-                                "type": "FAX",
-                                "ext": ""
-                            }
-                        ]
-                    },
-                    {
-                        "name": "Joe Doe",
-                        "functionCode": "CB",
-                        "email": "joe.doe@email.com",
-                        "phones": [
+    ];
     
-                        ]
-                    }
-                ]
-            },
-            "orderComments": [  
-                {
-                    "code": "H", 
-                    "description": "Order header comment here" 
-                },
-                {
-                    "code": "F",
-                    "description": "Order footer comment here"
-                },
-                {
-                    "code": "D",
-                    "description": "Order detail comment here"
-                }                    
-            ],        
-            "lines": [
-                { 
-                    "id": "1", 
-                    "itemNumber": "34RGPT3HVC", 
-                    "itemDescription": `Royal Building Products Triple 3-1/3" x 12' Hidden Vent Vinyl Soffit`,
-                    "dimensions": { 
-                        "length": {
-                            "uom": "ft",
-                            "value": 12
-                        }
-                    }, 
-                    "orderedQty": { 
-                        "value": 3,
-                        "uom": "SQ"
-                    },
-                    "unitPrice": {  
-                        "value": 24.59,
-                        "uom": "SQ",
-                        "instructions" : "Quote #123456"
-                    },
-                    "comments": 
-                    {
-                        "code": "D", 
-                        "description": "Line comment text here"
-                    }                   
-                },
-          ]
-       }
-    ]
-    })
-
-    console.log("Order Test Response:", orderTestResponse.data);
+    await axios.post(
+      "https://partners-sb.abcsupply.com/api/order/v2/orders",
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     
     return {
