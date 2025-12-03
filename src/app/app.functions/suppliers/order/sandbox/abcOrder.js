@@ -1,16 +1,17 @@
 const axios = require("axios");
 
 exports.main = async (context = {}) => {
+  const abcClientId = process.env.ABCClientSandbox;
+  const abcClientSecret = process.env.ABCClientSecretSandbox;
 
-   const abcClientId = process.env.ABCClientSandbox;
-   const abcClientSecret = process.env.ABCClientSecretSandbox;
+  // ABCClientSandbox='0oa21mviomnaC6L6H0h8'
+  // ABCClientSecretSandbox='BZAXkpWAxVqxvAN11J3uHaTe0Q4CtCYw2fnRvigh48VpGmnuZfKgMvt8aBBG-EJR'
 
-   // ABCClientSandbox='0oa21mviomnaC6L6H0h8'
-   // ABCClientSecretSandbox='BZAXkpWAxVqxvAN11J3uHaTe0Q4CtCYw2fnRvigh48VpGmnuZfKgMvt8aBBG-EJR'
+  const abcBasic64AuthKey = Buffer.from(
+    `${abcClientId}:${abcClientSecret}`
+  ).toString("base64");
 
-   const abcBasic64AuthKey = Buffer.from(`${abcClientId}:${abcClientSecret}`).toString('base64');
-
-   const config = {
+  const config = {
     method: "post",
     url: "https://sandbox.auth.partners.abcsupply.com/oauth2/aus1vp07knpuqf6Xz0h8/v1/token?grant_type=client_credentials&scope=location.read product.read pricing.read account.read order.write order.read",
     headers: {
@@ -27,7 +28,7 @@ exports.main = async (context = {}) => {
         success: false,
         message: "Token fetch failed",
         error: "No access token in response",
-        status: 401
+        status: 401,
       };
     }
 
@@ -41,30 +42,99 @@ exports.main = async (context = {}) => {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      timeout: 30000
+      timeout: 30000,
     });
 
-    console.log("Product Test Response:", productTestResponse.data);
+    console.log("Product Test Response:", JSON.stringify(productTestResponse.data, null, 2));
+
+    // Extract valid item number from product response
+    const products = productTestResponse.data?.items || [];
+    const validItem = products.length > 0 ? products[0] : null;
+    const itemNumber = validItem?.itemNumber || "34RGPT3HVC"; // Fallback to hardcoded
+    const itemUom = validItem?.unitOfMeasure || "EA" || "DR" || "RL" || "PC" || "CS";
+    
+    console.log("Using Item:", {
+      itemNumber: itemNumber,
+      itemName: validItem?.name,
+      uom: itemUom,
+      availableAtBranches: validItem?.branches
+    });
+
+    // axios.post(url, data, config)
+    // filters and pagination go in the request body (data), not in config
+    const accountResponse = await axios.post(
+      "https://partners-sb.abcsupply.com/api/account/v1/search/accounts",
+      {
+        filters: [
+          {
+            key: "accountType",
+            condition: "equals",
+            values: ["ship-to"]
+          },
+        ],
+        pagination: {
+          itemsPerPage: 10,
+          pageNumber: 1
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("Account Response:", JSON.stringify(accountResponse.data, null, 2));
+
+    // Extract valid ship-to numbers from account search
+    const accounts = accountResponse.data?.accounts || [];
+    const validShipTos = accounts.map(acc => ({
+      number: acc.number,
+      name: acc.name,
+      branchNumber: acc.branchNumber
+    }));
+    
+    console.log("Valid Ship-To Numbers:", validShipTos);
+    
+    // Use first valid ship-to if available, otherwise use hardcoded
+    const shipToNumber = validShipTos.length > 0 
+      ? validShipTos[0].number 
+      : "2010466-2"; // Fallback
+    const branchNumber = validShipTos.length > 0 
+      ? validShipTos[0].branchNumber 
+      : "118"; // Fallback
+    
+    console.log(`Using Ship-To: ${shipToNumber}, Branch: ${branchNumber}`);
+
+    // Calculate delivery date (7 days from now, formatted as YYYY-MM-DD)
+    const deliveryDate = new Date();
+    deliveryDate.setDate(deliveryDate.getDate() + 7);
+    const formattedDate = deliveryDate.toISOString().split('T')[0];
+    
+    console.log(`Using delivery date: ${formattedDate}`);
 
     const payload = [
       {
-        requestId: "sandbox-test-1",
-        purchaseOrder: "TEST-PO-1",
-        branchNumber: "118",          // or whatever sandbox branch they gave you
+        requestId: `sandbox-test-${Date.now()}`, // Unique request ID
+        purchaseOrder: `TEST-PO-${Date.now()}`, // Unique PO
+        branchNumber: branchNumber, // Use branch from account search
         deliveryService: "OTG",
         typeCode: "SO",
-        dates: { deliveryRequestedFor: "2026-03-05" },
+        dates: { 
+          deliveryRequestedFor: formattedDate // Use calculated date instead of hardcoded
+        },
         deliveryAppointment: {
           instructionsTypeCode: "AT",
-          instructions: "Sandbox test order",
+          instructions: "Sandbox test order - DO NOT FULFILL",
           fromTime: "10:00",
           toTime: "11:00",
           timeZoneCode: "CT",
         },
         currency: "USD",
         shipTo: {
-          name: "Sandbox Test",
-          number: "2011865-2",        // or a known sandbox ship-to
+          name: validShipTos.length > 0 ? validShipTos[0].name : "Sandbox Test",
+          number: shipToNumber, // Use ship-to from account search
           address: {
             line1: "123 Main St",
             line2: "",
@@ -80,33 +150,28 @@ exports.main = async (context = {}) => {
         lines: [
           {
             id: "1",
-            itemNumber: "34RGPT3HVC",  // from your product test response
-            orderedQty: { value: 1, uom: "EA" },
-            unitPrice: { value: 1.0, uom: "EA", instructions: "Sandbox test" },
+            itemNumber: itemNumber, // Use item from product response
+            orderedQty: { 
+              value: 1, 
+              uom: itemUom // Use UOM from product response
+            },
+            // For sandbox, unitPrice might need to be 0 or omitted
+            // Try with 0 first, ABC will price it
+            unitPrice: { 
+              value: 0.0, // Changed to 0 - ABC should price it
+              uom: itemUom, 
+              instructions: "Sandbox test - call for pricing" 
+            },
           },
         ],
       },
     ];
 
-  const accountResponse = await axios.post(
-    "https://partners-sb.abcsupply.com/api/account/v1/search/accounts",
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+    console.log("Order Payload:", JSON.stringify(payload, null, 2));
 
-  console.log("Account Response:", accountResponse.data);
+  
 
-  return {
-    success: true,
-    message: "Account Response",
-    data: accountResponse.data
-  }
-    
-    await axios.post(
+    const orderResponse = await axios.post(
       "https://partners-sb.abcsupply.com/api/order/v2/orders",
       payload,
       {
@@ -117,133 +182,97 @@ exports.main = async (context = {}) => {
       }
     );
 
+    console.log("Order Response:", JSON.stringify(orderResponse.data, null, 2));
+
+    // Check if order actually succeeded
+    const orderData = orderResponse.data || {};
+    const requestInfo = orderData.request || {};
+    const orders = orderData.orders || [];
     
+    if (requestInfo.ordersFailed > 0) {
+      const failedOrder = orders.find(o => !o.confirmationNumber) || orders[0];
+      console.error("Order failed:", {
+        requestId: failedOrder?.requestId,
+        message: failedOrder?.message,
+        errors: failedOrder?.errors,
+        fullResponse: orderData
+      });
+      
+      return {
+        success: false,
+        message: "ABC Order submission failed",
+        error: failedOrder?.message || "Order validation failed",
+        orderResponse: orderData,
+        requestId: failedOrder?.requestId,
+        accountResponse: accountResponse.data,
+        // Common issues to check:
+        diagnostic: {
+          branchNumber: payload[0]?.branchNumber,
+          shipToNumber: payload[0]?.shipTo?.number,
+          itemNumber: payload[0]?.lines?.[0]?.itemNumber,
+          deliveryDate: payload[0]?.dates?.deliveryRequestedFor,
+          note: "Check: 1) Ship-to valid for branch, 2) Item available at branch, 3) Date format, 4) Required fields"
+        }
+      };
+    }
+
     return {
       success: true,
-      message: "Product Test Response",
-      data: productTestResponse.data
-    }
-    
-    console.log("Placing order...");
-    
-    const orderConfig = {
-      method: "post",
-      url: "https://partners-sb.abcsupply.com/api/order/v2/orders",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      data: [{
-          "requestId": "12345",
-          "trackingId": "",
-          "purchaseOrder": "999999-9",
-          "branchNumber": "461",
-          "deliveryService": "OTG",
-          "typeCode": "SO",
-          "dates": {
-            "deliveryRequestedFor": "2026-03-05"
-          },
-          "deliveryAppointment": {
-            "instructionsTypeCode": "AT",
-            "instructions": "Please leave in driveway",
-            "fromTime": "10:00",
-            "toTime": "11:00",
-            "timeZoneCode": "CT"
-          },
-          "currency": "USD",
-          "shipTo": {
-            "number": "855712",
-            "address": {
-              "line1": "123 Main St",
-              "line2": "Apt 1",
-              "line3": "",
-              "city": "Anytown",
-              "state": "TX",
-              "postal": "12345",
-              "country": "USA"
-            },
-            "contacts": [
-              {
-                "name": "Adrian Johnson",
-                "functionCode": "SM",
-                "email": "adrian@rhinoroofers.com",
-                "phones": [
-                  {
-                    "number": "555-555-5555",
-                    "type": "MOBILE",
-                    "ext": ""
-                  }
-                ]
-              }
-            ]
-          },
-          "lines": [
-              {
-                  "id": "1",
-                  "itemNumber": "79BBL30HG5",
-                  "itemDescription": "Test Product Description",
-                  "orderedQty": {
-                    "value": 1,
-                    "uom": "EA"
-                  },
-                  "unitPrice": {
-                    "value": 0.00,
-                    "uom": "EA",
-                    "instructions": ""
-                  },
-                  "comments": {
-                    "code": "D",
-                    "description": "TEST ORDER - DO NOT FULFILL"
-                  }
-                }
-          ]
-        }],
-      };
+      message: "Order submitted successfully",
+      orderResponse: orderData,
+      confirmationNumber: orders[0]?.confirmationNumber,
+      accountResponse: accountResponse.data,
+    };
 
-      console.log("Request URL:", orderConfig.url);
-      console.log("Request payload:", JSON.stringify(orderConfig.data, null, 2));
-      
-      const orderResponse = await axios(orderConfig);
-      console.log("Order placed successfully ✓");
-      return {
-        success: true,
-        message: "Order placed successfully",
-        data: orderResponse.data
-      };
+   
   } catch (error) {
     const status = error?.response?.status;
     const errorData = error?.response?.data;
-    const errorMessage = errorData?.errorMessage || errorData?.error?.errorMessage || error?.message || "Unknown error";
+    const errorMessage =
+      errorData?.errorMessage ||
+      errorData?.error?.errorMessage ||
+      error?.message ||
+      "Unknown error";
     const requestData = error?.config?.data;
-    
-    console.error(`Error ${status || 'unknown'}:`, errorMessage);
+
+    console.error(`Error ${status || "unknown"}:`, errorMessage);
     console.error("Full error response:", JSON.stringify(errorData, null, 2));
     console.error("Request that failed:", {
       url: error?.config?.url,
       method: error?.config?.method,
       branchNumber: requestData?.[0]?.branchNumber,
       shipToNumber: requestData?.[0]?.shipTo?.number,
-      linesCount: requestData?.[0]?.lines?.length
+      linesCount: requestData?.[0]?.lines?.length,
     });
-    
+
     if (status === 401) {
-      if (errorMessage.includes("Ship-To") || errorMessage.includes("branch") || errorMessage.includes("invalid")) {
-        console.error("Issue: Invalid Ship-To or Branch Number for sandbox account");
+      if (
+        errorMessage.includes("Ship-To") ||
+        errorMessage.includes("branch") ||
+        errorMessage.includes("invalid")
+      ) {
+        console.error(
+          "Issue: Invalid Ship-To or Branch Number for sandbox account"
+        );
         console.error("  Branch:", requestData?.[0]?.branchNumber || "N/A");
         console.error("  Ship-To:", requestData?.[0]?.shipTo?.number || "N/A");
-        console.error("  Note: These values may work in production but not in sandbox");
+        console.error(
+          "  Note: These values may work in production but not in sandbox"
+        );
       } else {
         console.error("Issue: Authentication/Authorization failed");
-        console.error("  Check: Token scopes, account permissions, or API endpoint");
+        console.error(
+          "  Check: Token scopes, account permissions, or API endpoint"
+        );
       }
     }
-    
+
     return {
       success: false,
-      message: status === 401 ? "Authentication failed" : "Order placement failed",
+      message:
+        status === 401 ? "Authentication failed" : "Order placement failed",
       error: errorData || errorMessage,
-      status: status || 500
+      status: status || 500,
     };
   }
-}
+};
