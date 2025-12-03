@@ -1,0 +1,77 @@
+{
+  "supplier": "SRS",
+  "fieldMappings": {
+    "accountNumber": "accountNumber",
+    "branchId": "branchCode",
+    "poNumber": "poDetails.poNumber",
+    "jobName": "shipTo.name",
+    "jobNumber": "jobAccountNumber",
+    "delivery.date": "poDetails.expectedDeliveryDate",
+    "delivery.timeCode": "poDetails.expectedDeliveryTime",
+    "delivery.method": "poDetails.shippingMethod",
+    "delivery.address.line1": "shipTo.addressLine1",
+    "delivery.address.line2": "shipTo.addressLine2",
+    "delivery.address.line3": "shipTo.addressLine3",
+    "delivery.address.city": "shipTo.city",
+    "delivery.address.state": "shipTo.state",
+    "delivery.address.postalCode": "shipTo.zipCode",
+    "delivery.contact.name": "customerContactInfo.customerContactName",
+    "delivery.contact.phone": "customerContactInfo.customerContactPhone",
+    "delivery.contact.email": "customerContactInfo.customerContactEmail",
+    "delivery.notes": "notes"
+  },
+  "lineItemMappings": {
+    "sku": "customerItem",
+    "description": "productName",
+    "qty": "quantity",
+    "uom": "uom",
+    "price": "price",
+    "productId": "productId"
+  },
+  "defaults": {
+    "sourceSystem": "RHINO",
+    "customerCode": "RCO207",
+    "jobAccountNumber": 1,
+    "branchCode": "SSSAN",
+    "accountNumber": "DEMO001",
+    "transactionID": "",
+    "transactionDate": "",
+    "notes": "",
+    "poDetails.orderDate": "",
+    "poDetails.reference": "",
+    "poDetails.jobNumber": "",
+    "poDetails.orderType": "WHSE",
+    "poDetails.shippingMethod": "Ground Drop",
+    "shipTo.addressLine2": "",
+    "shipTo.addressLine3": "",
+    "customerContactInfo.customerContactAddress.addressLine1": "",
+    "customerContactInfo.customerContactAddress.city": "",
+    "customerContactInfo.customerContactAddress.state": "",
+    "customerContactInfo.customerContactAddress.zipCode": "",
+    "customerContactInfo.additionalContactEmails": []
+  },
+  "wrapper": {
+    "type": "object"
+  },
+  "enumMappings": {
+    "delivery.method": {
+      "Delivery": "Ground Drop",
+      "Pickup": "Customer Pickup",
+      "roofDrop": "Ground Drop"
+    },
+    "delivery.timeCode": {
+      "Anytime": "Anytime",
+      "anytime": "Anytime",
+      "Morning": "Morning",
+      "Afternoon": "Afternoon",
+      "Special": "Special",
+      "Exact": "Special",
+      "Range": "Special"
+    }
+  },
+  "specialHandlers": {
+    "transactionID": "generateUUID",
+    "transactionDate": "generateTimestamp"
+  }
+}
+

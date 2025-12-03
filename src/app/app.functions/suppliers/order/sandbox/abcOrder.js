@@ -50,7 +50,7 @@ exports.main = async (context = {}) => {
       {
         requestId: "sandbox-test-1",
         purchaseOrder: "TEST-PO-1",
-        branchNumber: "461",          // or whatever sandbox branch they gave you
+        branchNumber: "118",          // or whatever sandbox branch they gave you
         deliveryService: "OTG",
         typeCode: "SO",
         dates: { deliveryRequestedFor: "2026-03-05" },
@@ -64,7 +64,7 @@ exports.main = async (context = {}) => {
         currency: "USD",
         shipTo: {
           name: "Sandbox Test",
-          number: "855708",        // or a known sandbox ship-to
+          number: "2011865-2",        // or a known sandbox ship-to
           address: {
             line1: "123 Main St",
             line2: "",
@@ -87,6 +87,24 @@ exports.main = async (context = {}) => {
         ],
       },
     ];
+
+  const accountResponse = await axios.post(
+    "https://partners-sb.abcsupply.com/api/account/v1/search/accounts",
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  console.log("Account Response:", accountResponse.data);
+
+  return {
+    success: true,
+    message: "Account Response",
+    data: accountResponse.data
+  }
     
     await axios.post(
       "https://partners-sb.abcsupply.com/api/order/v2/orders",

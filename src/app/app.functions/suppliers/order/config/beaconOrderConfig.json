@@ -1,0 +1,48 @@
+{
+  "supplier": "BEACON",
+  "fieldMappings": {
+    "accountNumber": "accountNumber",
+    "branchId": "branchId",
+    "poNumber": "poNumber",
+    "jobName": "jobName",
+    "delivery.date": "deliveryDate",
+    "delivery.timeCode": "deliveryTimeCode",
+    "delivery.address.line1": "deliveryAddress.line1",
+    "delivery.address.line2": "deliveryAddress.line2",
+    "delivery.address.city": "deliveryAddress.city",
+    "delivery.address.state": "deliveryAddress.state",
+    "delivery.address.postalCode": "deliveryAddress.postalCode",
+    "delivery.contact.name": "deliveryContact.name",
+    "delivery.contact.phone": "deliveryContact.phone",
+    "delivery.contact.email": "deliveryContact.email",
+    "delivery.notes": "deliveryNotes"
+  },
+  "lineItemMappings": {
+    "sku": "itemNumber",
+    "description": "description",
+    "qty": "quantity",
+    "uom": "uom",
+    "price": "unitPrice"
+  },
+  "defaults": {
+    "orderType": "STANDARD",
+    "currency": "USD"
+  },
+  "wrapper": {
+    "type": "object"
+  },
+  "enumMappings": {
+    "delivery.method": {
+      "Delivery": "DELIVERY",
+      "Pickup": "PICKUP",
+      "roofDrop": "DELIVERY"
+    },
+    "delivery.timeCode": {
+      "Anytime": "ANYTIME",
+      "anytime": "ANYTIME",
+      "Morning": "MORNING",
+      "Afternoon": "AFTERNOON"
+    }
+  }
+}
+
