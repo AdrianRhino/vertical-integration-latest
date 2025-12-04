@@ -1,23 +1,43 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context (optional environment parameter)
+ * Filter: Validates credentials exist
+ * Transform: Gets credentials from config, creates auth token, formats order
+ * Store: N/A
+ * Output: Order submission response from SRS API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
+
 const axios = require("axios");
 const qs = require("qs");
+const { getCredentials } = require("../../config/getCredentials");
 
 exports.main = async (context = {}) => {
+    // Get environment from context or read from config
+    const environment = context.parameters?.environment || null;
+    const credentials = getCredentials("SRS", environment);
 
-    console.log("Placing SRS sandbox order...");
+    console.log(`Placing SRS order (${credentials.environment})...`);
 
-    const srsClientId = process.env.SRSID_STAGING;
-    const srsClientSecret = process.env.SRSSECRET_STAGING;
+    if (!credentials.clientId || !credentials.clientSecret) {
+        return {
+            success: false,
+            message: "SRS credentials missing",
+            error: `SRS credentials not found for environment: ${credentials.environment}`,
+        };
+    }
 
     const data = qs.stringify({
         grant_type: "client_credentials",
-        client_id: srsClientId,
-        client_secret: srsClientSecret,
+        client_id: credentials.clientId,
+        client_secret: credentials.clientSecret,
         scope: "ALL"
     });
 
     const config = {
         method: "post",
-        url: "https://services-qa.roofhub.pro/authentication/token",
+        url: credentials.authUrl,
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
         },
@@ -86,7 +106,7 @@ exports.main = async (context = {}) => {
 
             const orderConfig = {
                 method: "POST",
-                url: "https://services-qa.roofhub.pro/orders/v2/Submit",
+                url: `${credentials.apiBaseUrl}/orders/v2/Submit`,
                 headers: {
                     Authorization: `Bearer ${response.data?.access_token}`,
                     "Content-Type": "application/json"
@@ -112,8 +132,9 @@ exports.main = async (context = {}) => {
                 console.log("Order Response:", orderResponse.data);
                 return {
                     success: true,
-                    message: "SRS Order successful",
-                    orderResponse: orderResponse.data
+                    message: `SRS Order successful (${credentials.environment})`,
+                    orderResponse: orderResponse.data,
+                    environment: credentials.environment,
                 };
             });
             

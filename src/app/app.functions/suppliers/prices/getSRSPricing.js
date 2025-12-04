@@ -1,7 +1,19 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context with token, fullOrder, optional environment
+ * Filter: Validates token and fullOrder exist
+ * Transform: Gets API base URL from credentials config, formats line items
+ * Store: N/A
+ * Output: Pricing data from SRS API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
+
 const axios = require("axios");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
-    const { token, fullOrder } = context.parameters || {};
+    const { token, fullOrder, environment = null } = context.parameters || {};
 
     {/*
         Test Product
@@ -98,9 +110,13 @@ exports.main = async (context = {}) => {
         productList,
     };
 
+    // Get API base URL from credentials config
+    const credentials = getCredentials("SRS", environment);
+    const apiBaseUrl = credentials.apiBaseUrl;
+
     const config = {
         method: "POST",
-        url: "https://services.roofhub.pro/products/v2/price",
+        url: `${apiBaseUrl}/products/v2/price`,
         headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -124,8 +140,9 @@ exports.main = async (context = {}) => {
         
         return {
             success: true,
-            message: "SRS Pricing fetched successfully",
+            message: `SRS Pricing fetched successfully (${credentials.environment})`,
             data: response.data,
+            environment: credentials.environment,
         };
     }
     catch (error) {

@@ -1,11 +1,21 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context with token, optional environment
+ * Filter: Validates token exists
+ * Transform: Gets API base URL from credentials config
+ * Store: N/A
+ * Output: Product data from SRS API
+ * Loop: Self-healing - reads environment from master config if not provided
+ */
+
 const axios = require("axios");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
   console.log("Fetching SRS Products...");
- // console.log("Context received:", context);
- // console.log("Parameters received:", context.parameters);
 
-  const { token } = context.parameters || {};
+  const { token, environment = null } = context.parameters || {};
 
   if (!token) {
     console.error("No access token provided");
@@ -15,11 +25,15 @@ exports.main = async (context = {}) => {
     };
   }
 
-  console.log("Token received:", token ? "Token exists" : "No token");
+  // Get API base URL from credentials config
+  const credentials = getCredentials("SRS", environment);
+  const apiBaseUrl = credentials.apiBaseUrl;
+
+  console.log(`Using SRS API (${credentials.environment}): ${apiBaseUrl}`);
 
   const config = {
     method: "get",
-    url: "https://services.roofhub.pro/products/v2/catalog",
+    url: `${apiBaseUrl}/products/v2/catalog`,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -27,18 +41,14 @@ exports.main = async (context = {}) => {
     timeout: 30000
   };
 
- // console.log("Making request to:", config.url);
- // console.log("Request headers:", config.headers);
-
   try {
     const response = await axios(config);
-  //  console.log("SRS Products Response Status:", response.status);
-  //  console.log("SRS Products Response Data:", response.data);
     
     return {
       success: true,
-      message: "SRS Products fetched successfully",
+      message: `SRS Products fetched successfully (${credentials.environment})`,
       products: response.data,
+      environment: credentials.environment,
     };
   } catch (error) {
     console.error("Error fetching SRS Products:");

@@ -1,19 +1,48 @@
-const axios = require("axios");
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context (optional environment parameter)
+ * Filter: Validates credentials exist
+ * Transform: Gets credentials from config, creates auth session
+ * Store: N/A
+ * Output: Session cookies for Beacon API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
 
-exports.main = async () => {
+const axios = require("axios");
+const { getCredentials } = require("../config/getCredentials");
+
+exports.main = async (context = {}) => {
   console.log("Beacon Login...");
 
   try {
+    // Get environment from context or read from config
+    const environment = context.parameters?.environment || null;
+    const credentials = getCredentials("BEACON", environment);
+
+    if (!credentials.username || !credentials.password) {
+      throw new Error(
+        `Missing Beacon credentials for ${credentials.environment}. ` +
+        `Check environment variables: username, password`
+      );
+    }
+
+    const loginPayload = {
+      username: credentials.username,
+      password: credentials.password,
+      siteId: "homeSite",
+      persistentLoginType: "RememberMe",
+      userAgent: "desktop",
+    };
+
+    // Only include apiSiteId if it's configured and not empty
+    if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
+      loginPayload.apiSiteId = credentials.apiSiteId;
+    }
+
     const loginResponse = await axios.post(
-      "https://beaconproplus.com/v1/rest/com/becn/login",
-      {
-        username: process.env.beaconUsername,
-        password: process.env.beaconPass,
-        siteId: "homeSite",                     
-        persistentLoginType: "RememberMe",      
-        userAgent: "desktop",                   
-        apiSiteId: "UAT"   
-      },
+      credentials.authUrl,
+      loginPayload,
       {
         headers: {
           "Content-Type": "application/json",
@@ -32,11 +61,16 @@ exports.main = async () => {
       .join("; ");
 
     return {
-      message: "Beacon Login successful",
+      message: `Beacon Login successful (${credentials.environment})`,
       cookies: cookieString,
+      environment: credentials.environment,
     };
   } catch (error) {
     console.error("Error in Beacon Login:", error);
-    throw new Error("Beacon Login failed", error);
+    return {
+      success: false,
+      message: "Beacon Login failed",
+      error: error.message,
+    };
   }
 };

@@ -1,4 +1,16 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context with cookies, fullOrder, optional environment
+ * Filter: Validates cookies and fullOrder exist
+ * Transform: Gets API base URL from credentials config, formats line items
+ * Store: N/A
+ * Output: Pricing data from Beacon API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
+
 const axios = require("axios");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
 
@@ -6,7 +18,7 @@ exports.main = async (context = {}) => {
 
     console.log("Beacon Pricing...");
 
-    const { cookies, fullOrder } = context.parameters || {};
+    const { cookies, fullOrder, environment = null } = context.parameters || {};
 
     if (!cookies) {
         console.error("No cookies provided");
@@ -24,6 +36,10 @@ exports.main = async (context = {}) => {
         };
     }
 
+    // Get API base URL from credentials config
+    const credentials = getCredentials("BEACON", environment);
+    const apiBaseUrl = credentials.apiBaseUrl;
+
     const formattedLineItems = fullOrder.fullOrderItems.map(item => ({
         id: item.id,
         itemNumber: item.sku,
@@ -31,9 +47,9 @@ exports.main = async (context = {}) => {
         uom: item.uom,
     }));
 
-    config = {
+    const config = {
         method: "get",
-        url: "https://beaconproplus.com/v1/rest/com/becn/pricing",
+        url: `${apiBaseUrl}/v1/rest/com/becn/pricing`,
         headers: {
             Cookie: cookies,
         },
@@ -47,8 +63,9 @@ exports.main = async (context = {}) => {
         console.log("Beacon Pricing Response: ", response.data);
         return {
             success: true,
-            message: "Beacon Pricing fetched successfully",
+            message: `Beacon Pricing fetched successfully (${credentials.environment})`,
             data: response.data,
+            environment: credentials.environment,
         };
     } catch (error) {
         console.error("Error in Beacon Pricing: ", error);

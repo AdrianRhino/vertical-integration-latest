@@ -1,7 +1,19 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context with abcAccessToken, fullOrder, optional environment
+ * Filter: Validates access token and fullOrder exist
+ * Transform: Gets API base URL from credentials config, formats line items
+ * Store: N/A
+ * Output: Pricing data from ABC API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
+
 const axios = require("axios");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
-    const { abcAccessToken, fullOrder } = context.parameters || {};
+    const { abcAccessToken, fullOrder, environment = null } = context.parameters || {};
 
     {/*
         Test Product
@@ -29,6 +41,10 @@ exports.main = async (context = {}) => {
         };
     }
 
+    // Get API base URL from credentials config
+    const credentials = getCredentials("ABC", environment);
+    const apiBaseUrl = credentials.apiBaseUrl;
+
     const formattedLineItems = fullOrder.fullOrderItems.map(item => ({
         id: item.id,
         itemNumber: item.sku,
@@ -37,10 +53,11 @@ exports.main = async (context = {}) => {
     }));
 
     console.log("Formatted Line Items:", formattedLineItems);
+    console.log(`Using ABC API (${credentials.environment}): ${apiBaseUrl}`);
 
     const config = {
         method: "post",
-        url: "https://partners.abcsupply.com/api/pricing/v2/prices",
+        url: `${apiBaseUrl}/api/pricing/v2/prices`,
         headers: {
             Authorization: `Bearer ${abcAccessToken}`,
             "Content-Type": "application/json",
@@ -52,7 +69,6 @@ exports.main = async (context = {}) => {
             requestId: "Test-Quote-123",
             purpose: "estimating",
             lines: formattedLineItems,
-           
         },
     };  
     try {
@@ -60,8 +76,9 @@ exports.main = async (context = {}) => {
         console.log("ABC Pricing Response:", response.data);
         return {
             success: true,
-            message: "ABC Pricing fetched successfully",
+            message: `ABC Pricing fetched successfully (${credentials.environment})`,
             data: response.data,
+            environment: credentials.environment,
         };
     } catch (error) {
         console.error("Error in ABC Pricing:", error);

@@ -1,8 +1,20 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context with orderBody, optional environment
+ * Filter: Validates credentials exist
+ * Transform: Gets credentials from config, creates auth session, formats order
+ * Store: N/A
+ * Output: Order submission response from Beacon API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
+
 const axios = require("axios");
 const https = require("https");
 const { CookieJar } = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
 const { formatOrder } = require("../formatOrder");
+const { getCredentials } = require("../../config/getCredentials");
 
 /**
  * Checks if URL requires SSL bypass (dev/UAT environments)
@@ -84,33 +96,38 @@ function extractCookies(response) {
 }
 
 exports.main = async (context = {}) => {
-    console.log("Placing Beacon sandbox order...");
+    // Get environment from context or read from config
+    const environment = context.parameters?.environment || null;
+    const credentials = getCredentials("BEACON", environment);
+
+    console.log(`Placing Beacon order (${credentials.environment})...`);
 
     try {
         const { orderBody } = context.parameters || {};
         
         // Step 1: Authenticate and get cookies
-        const beaconUsername = process.env.beaconUsername;
-        const beaconPassword = process.env.beaconPass;
-    
-        if (!beaconUsername || !beaconPassword) {
+        if (!credentials.username || !credentials.password) {
             return {
                 success: false,
                 message: "Beacon credentials not configured",
-                error: "Missing beaconUsername or beaconPass environment variables",
+                error: `Missing Beacon credentials for environment: ${credentials.environment}`,
             };
         }
     
         const loginPayload = {
-            username: beaconUsername,
-            password: beaconPassword,
+            username: credentials.username,
+            password: credentials.password,
             siteId: "homeSite",
             persistentLoginType: "RememberMe",
             userAgent: "desktop",
-            apiSiteId: "UAT", // UAT for sandbox/testing
         };
+
+        // Only include apiSiteId if it's configured and not empty
+        if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
+            loginPayload.apiSiteId = credentials.apiSiteId;
+        }
     
-        const loginUrl = "https://uat-api.qxo.com/v1/rest/com/becn/login";
+        const loginUrl = credentials.authUrl;
         
         let loginResponse;
         let cookieString = null;
@@ -223,11 +240,11 @@ exports.main = async (context = {}) => {
         }
 
         // Step 2: Submit order with authentication
-        const orderUrl = "https://uat-api.qxo.com/v1/rest/com/becn/submitOrder";
+        const orderUrl = `${credentials.apiBaseUrl}/v1/rest/com/becn/submitOrder`;
         
         const payload = {
             "accountId": "557799", // Hardcoded - Should be dynamic
-            "apiSiteId": "RRC", // Hardcoded - Related to "UAT" in auth?
+            "apiSiteId": "UAT", // Hardcoded - Related to "UAT" in auth?
             "job": {
               "checked": false, // Default
               // Truncate deal_object_id to ensure jobName is <= 15 characters
@@ -264,6 +281,11 @@ exports.main = async (context = {}) => {
             "pickupDate": `${orderBody?.delivery?.date || ""}`, // Ensure this format is correct for Beacon
             "pickupTime": `${orderBody?.delivery?.time || "Anytime"}`, // Default if missing
         };
+
+        // Only include apiSiteId in order payload if it's configured and not empty
+        if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
+            payload.apiSiteId = credentials.apiSiteId;
+        }
 
         console.log("Submitting order to:", orderUrl);
         console.log("Order payload:", JSON.stringify(payload, null, 2));
@@ -329,10 +351,11 @@ exports.main = async (context = {}) => {
             
             return {
                 success: true,
-                message: "Beacon order submitted successfully",
+                message: `Beacon order submitted successfully (${credentials.environment})`,
                 loginResponse: loginData,
                 cookiesCaptured: hasCookies,
                 cookieString: cookieString,
+                environment: credentials.environment,
                 orderResponse: orderData
             };
             

@@ -1,19 +1,37 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context (optional environment parameter)
+ * Filter: Validates credentials exist
+ * Transform: Gets credentials from config, creates auth token, formats order
+ * Store: N/A
+ * Output: Order submission response from ABC API
+ * Loop: Self-healing - reads environment from order config if not provided
+ */
+
 const axios = require("axios");
+const { getCredentials } = require("../../config/getCredentials");
 
 exports.main = async (context = {}) => {
-  const abcClientId = process.env.ABCClientSandbox;
-  const abcClientSecret = process.env.ABCClientSecretSandbox;
+  // Get environment from context or read from config
+  const environment = context.parameters?.environment || null;
+  const credentials = getCredentials("ABC", environment);
 
-  // ABCClientSandbox='0oa21mviomnaC6L6H0h8'
-  // ABCClientSecretSandbox='BZAXkpWAxVqxvAN11J3uHaTe0Q4CtCYw2fnRvigh48VpGmnuZfKgMvt8aBBG-EJR'
+  if (!credentials.clientId || !credentials.clientSecret) {
+    return {
+      success: false,
+      message: "ABC credentials missing",
+      error: `ABC credentials not found for environment: ${credentials.environment}`,
+    };
+  }
 
   const abcBasic64AuthKey = Buffer.from(
-    `${abcClientId}:${abcClientSecret}`
+    `${credentials.clientId}:${credentials.clientSecret}`
   ).toString("base64");
 
   const config = {
     method: "post",
-    url: "https://sandbox.auth.partners.abcsupply.com/oauth2/aus1vp07knpuqf6Xz0h8/v1/token?grant_type=client_credentials&scope=location.read product.read pricing.read account.read order.write order.read",
+    url: credentials.authUrl,
     headers: {
       Authorization: `Basic ${abcBasic64AuthKey}`,
       "Content-Type": "application/x-www-form-urlencoded",
@@ -37,7 +55,7 @@ exports.main = async (context = {}) => {
 
     const productTestResponse = await axios({
       method: "get",
-      url: "https://partners-sb.abcsupply.com/api/product/v1/items?itemsPerPage=1&pageNumber=1&embed=branches",
+      url: `${credentials.apiBaseUrl}/api/product/v1/items?itemsPerPage=1&pageNumber=1&embed=branches`,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -63,7 +81,7 @@ exports.main = async (context = {}) => {
     // axios.post(url, data, config)
     // filters and pagination go in the request body (data), not in config
     const accountResponse = await axios.post(
-      "https://partners-sb.abcsupply.com/api/account/v1/search/accounts",
+      `${credentials.apiBaseUrl}/api/account/v1/search/accounts`,
       {
         filters: [
           {
@@ -172,7 +190,7 @@ exports.main = async (context = {}) => {
   
 
     const orderResponse = await axios.post(
-      "https://partners-sb.abcsupply.com/api/order/v2/orders",
+      `${credentials.apiBaseUrl}/api/order/v2/orders`,
       payload,
       {
         headers: {
@@ -218,10 +236,11 @@ exports.main = async (context = {}) => {
 
     return {
       success: true,
-      message: "Order submitted successfully",
+      message: `Order submitted successfully (${credentials.environment})`,
       orderResponse: orderData,
       confirmationNumber: orders[0]?.confirmationNumber,
       accountResponse: accountResponse.data,
+      environment: credentials.environment,
     };
 
    

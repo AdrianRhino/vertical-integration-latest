@@ -1,9 +1,19 @@
+/**
+ * Shape Language: Input → Filter → Transform → Store → Output → Loop
+ * 
+ * Input: Context with abcAccessToken, optional environment
+ * Filter: Validates access token exists
+ * Transform: Gets API base URL from credentials config
+ * Store: N/A
+ * Output: Product data from ABC API
+ * Loop: Self-healing - reads environment from master config if not provided
+ */
+
 const axios = require("axios");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
-
-
-  const { abcAccessToken } = context.parameters || {};
+  const { abcAccessToken, environment = null } = context.parameters || {};
 
   if (!abcAccessToken) {
     console.error("No ABC access token provided");
@@ -13,11 +23,13 @@ exports.main = async (context = {}) => {
     };
   }
 
- // console.log("ABC Access Token:", abcAccessToken ? "Found" : "Not Found");
+  // Get API base URL from credentials config
+  const credentials = getCredentials("ABC", environment);
+  const apiBaseUrl = credentials.apiBaseUrl;
 
   const config = {
     method: "get",
-    url: "https://partners.abcsupply.com/api/product/v1/items?itemsPerPage=100&pageNumber=3&embed=branches",
+    url: `${apiBaseUrl}/api/product/v1/items?itemsPerPage=100&pageNumber=3&embed=branches`,
     headers: {
       Authorization: `Bearer ${abcAccessToken}`,
       "Content-Type": "application/json",
@@ -28,11 +40,11 @@ exports.main = async (context = {}) => {
   try {
     const response = await axios(config);
    
-   // console.log("ABC Products Response Data:", response.data);
     return {
       success: true,
-      message: "ABC Products fetched successfully",
+      message: `ABC Products fetched successfully (${credentials.environment})`,
       data: response.data,
+      environment: credentials.environment,
     };
   } catch (error) {
     console.error("Error in ABC Products:");

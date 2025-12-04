@@ -1,0 +1,5 @@
+{
+  "_comment": "SINGLE SOURCE OF TRUTH: Change this value to switch all suppliers between 'prod' and 'sandbox'",
+  "environment": "sandbox"
+}
+

@@ -1,5 +1,6 @@
 {
   "supplier": "BEACON",
+  "environment": "sandbox",
   "fieldMappings": {
     "accountNumber": "accountNumber",
     "branchId": "branchId",
