@@ -60,14 +60,6 @@
     "file": "suppliers/supabase/supplierProducts.js",
     "secrets": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
   },
-  "abcLoginSandbox": {
-    "file": "suppliers/login/abcLoginSandbox.js",
-    "secrets": []
-  },
-  "testAuth": {
-    "file": "suppliers/login/testAuth.js",
-    "secrets": []
-  },
   "abcOrderSandbox": {
     "file": "suppliers/order/sandbox/abcOrder.js",
     "secrets": []

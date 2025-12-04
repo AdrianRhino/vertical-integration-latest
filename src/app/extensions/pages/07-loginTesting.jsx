@@ -16,23 +16,14 @@ const LoginTesting = () => {
         }
     }
     const testABCLoginSandbox = async () => {
-        console.log("Testing ABC Login Sandbox...");
+        console.log("Testing ABC Login (uses environment.json setting)...");
         try {
-            console.log("Calling ABC Login Sandbox...");
-            const abcLoginTokenSandbox = await hubspot.serverless("abcLoginSandbox");
+            console.log("Calling ABC Login (unified, reads from environment.json)...");
+            const abcLoginTokenSandbox = await hubspot.serverless("abcLogin");
             setAbcLoginTokenSandbox(abcLoginTokenSandbox);
-            console.log("ABC Login Sandbox Token:", abcLoginTokenSandbox);
+            console.log("ABC Login Token:", abcLoginTokenSandbox);
         } catch (error) {
             setAbcLoginTokenSandboxError(error);
-        }
-    }
-
-    const testAuth = async () => {
-        try {
-            const authResponse = await hubspot.serverless("testAuth");
-            console.log("Auth response:", authResponse);
-        } catch (error) {
-            console.error("Error in Test Auth:", error);
         }
     }
  
@@ -40,10 +31,11 @@ const LoginTesting = () => {
   return (
     <>
       <Text>Login Testing</Text>
-      <Button onClick={testABCLoginSandbox}>Login to ABC</Button>
+      <Text>Note: All logins now use unified functions that read from environment.json</Text>
+      <Button onClick={testABCLogin}>Login to ABC (Prod)</Button>
+      <Button onClick={testABCLoginSandbox}>Login to ABC (Environment-based)</Button>
       <Button>Login to SRS</Button>
       <Button>Login to Beacon</Button>
-      <Button onClick={testAuth}>Test Auth</Button>
     </>
   );
 };
