@@ -13,8 +13,8 @@ const axios = require("axios");
 const https = require("https");
 const { CookieJar } = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
-const { formatOrder } = require("../formatOrder");
-const { getCredentials } = require("../../config/getCredentials");
+const { formatOrder } = require("./formatOrder");
+const { getCredentials } = require("../config/getCredentials");
 
 /**
  * Checks if URL requires SSL bypass (dev/UAT environments)

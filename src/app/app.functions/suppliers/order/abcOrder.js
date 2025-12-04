@@ -10,7 +10,7 @@
  */
 
 const axios = require("axios");
-const { getCredentials } = require("../../config/getCredentials");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
   // Get environment from context or read from config
@@ -131,6 +131,23 @@ exports.main = async (context = {}) => {
     const formattedDate = deliveryDate.toISOString().split('T')[0];
     
     console.log(`Using delivery date: ${formattedDate}`);
+
+    const testPayload = (credentials.environment === "sandbox") ? {
+        requestId: `sandbox-test-${Date.now()}`, // Unique request ID
+        purchaseOrder: `TEST-PO-${Date.now()}`, // Unique PO
+        branchNumber: branchNumber, // Use branch from account search
+        deliveryService: "OTG",
+        typeCode: "SO",
+      }
+     : {
+      requestId: `prod-test-${Date.now()}`, // Unique request ID
+      purchaseOrder: `PROD-PO-${Date.now()}`, // Unique PO
+      branchNumber: branchNumber, // Use branch from account search
+      deliveryService: "OTG",
+      typeCode: "SO",
+    }
+
+    console.log("Test Payload:", JSON.stringify(testPayload, null, 2));
 
     const payload = [
       {

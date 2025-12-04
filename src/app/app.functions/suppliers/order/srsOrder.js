@@ -11,7 +11,7 @@
 
 const axios = require("axios");
 const qs = require("qs");
-const { getCredentials } = require("../../config/getCredentials");
+const { getCredentials } = require("../config/getCredentials");
 
 exports.main = async (context = {}) => {
     // Get environment from context or read from config

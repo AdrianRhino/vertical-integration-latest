@@ -61,15 +61,15 @@
     "secrets": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
   },
   "abcOrderSandbox": {
-    "file": "suppliers/order/sandbox/abcOrder.js",
+    "file": "suppliers/order/abcOrder.js",
     "secrets": []
   }, 
   "srsOrderSandbox": {
-    "file": "suppliers/order/sandbox/srsOrder.js",
+    "file": "suppliers/order/srsOrder.js",
     "secrets": []
   },
   "beaconOrderSandbox": {
-    "file": "suppliers/order/sandbox/beaconOrder.js",
+    "file": "suppliers/order/beaconOrder.js",
     "secrets": []
   }
 } 
