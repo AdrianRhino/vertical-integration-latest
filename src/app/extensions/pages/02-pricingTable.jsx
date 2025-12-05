@@ -361,10 +361,24 @@ useEffect(() => {
 
     const normalizedQty = Number(incoming.qty) || 0;
     const normalizedUnitPrice = Number(incoming.unitPrice) || 0;
+    
+    // Normalize SKU for comparison (convert to string, trim, lowercase)
+    const normalizeSku = (sku) => {
+      if (!sku) return '';
+      return String(sku).trim().toLowerCase();
+    };
+    
+    const incomingSkuNormalized = normalizeSku(incoming.sku);
 
     setPricingTableItems((prev) => {
-      const index = prev.findIndex((item) => item.sku === incoming.sku);
+      // Find item with matching SKU (case-insensitive, handles string/number differences)
+      const index = prev.findIndex((item) => {
+        const itemSkuNormalized = normalizeSku(item.sku);
+        return itemSkuNormalized === incomingSkuNormalized && itemSkuNormalized !== '';
+      });
+      
       if (index === -1) {
+        // Item doesn't exist, add new one
         const nextLinePrice = normalizedQty * normalizedUnitPrice;
         return [
           ...prev,
@@ -377,6 +391,7 @@ useEffect(() => {
         ];
       }
 
+      // Item exists, merge quantities
       return prev.map((item, i) => {
         if (i !== index) return item;
 
