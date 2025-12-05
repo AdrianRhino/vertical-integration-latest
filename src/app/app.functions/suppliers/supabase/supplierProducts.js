@@ -20,6 +20,72 @@ const STEP_HANDLERS = {
   FUZZY: runFuzzyStep,
 };
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 500; // 500ms
+const MAX_RETRY_DELAY = 5000; // 5 seconds
+
+/**
+ * Retry with exponential backoff
+ * @param {Function} fn - Function to retry
+ * @param {number} maxRetries - Maximum number of retries
+ * @param {number} initialDelay - Initial delay in ms
+ * @param {number} maxDelay - Maximum delay in ms
+ * @returns {Promise} Result of function execution
+ */
+async function retryWithBackoff(fn, maxRetries = MAX_RETRIES, initialDelay = INITIAL_RETRY_DELAY, maxDelay = MAX_RETRY_DELAY) {
+  let lastError;
+  let delay = initialDelay;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      
+      // Don't retry on validation errors (4xx)
+      if (error.response?.status >= 400 && error.response?.status < 500) {
+        throw error;
+      }
+      
+      // If this was the last attempt, throw the error
+      if (attempt === maxRetries) {
+        console.error(`All ${maxRetries + 1} retry attempts failed`);
+        throw error;
+      }
+      
+      // Wait before retrying with exponential backoff
+      console.warn(`Attempt ${attempt + 1} failed, retrying in ${delay}ms...`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Exponential backoff: double the delay, but cap at maxDelay
+      delay = Math.min(delay * 2, maxDelay);
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
+ * Execute ladder with retry and fallback
+ */
+async function executeLadderWithRetry(params) {
+  try {
+    return await retryWithBackoff(() => executeLadder(params));
+  } catch (error) {
+    console.error("executeLadder failed after retries, using fallback", error);
+    
+    // Fallback: Return empty result instead of failing completely
+    return {
+      items: [],
+      nextCursor: null,
+      sourceStep: "FALLBACK",
+      fallback: true,
+      error: error.message
+    };
+  }
+}
+
 exports.main = async (context = {}) => {
   const startedAt = Date.now();
 
@@ -61,7 +127,8 @@ exports.main = async (context = {}) => {
       auth: { persistSession: false },
     });
 
-    const ladderResult = await executeLadder({
+    // Execute ladder with retry and fallback
+    const ladderResult = await executeLadderWithRetry({
       supabase,
       supplier: supplierFilter,
       supplierConfig,
@@ -80,14 +147,27 @@ exports.main = async (context = {}) => {
         pageSize,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
+        fallback: ladderResult.fallback || false,
       },
     });
   } catch (error) {
     console.error("supplierProducts failed", error);
-    return buildResponse(500, {
-      success: false,
-      error: "Unhandled supplierProducts error",
-      details: error.message,
+    
+    // Final fallback: Return empty result instead of error
+    return buildResponse(200, {
+      success: true,
+      items: [],
+      nextCursor: null,
+      sourceStep: "FALLBACK",
+      fallback: true,
+      error: error.message,
+      meta: {
+        supplier: (context.parameters?.supplier || "").toUpperCase(),
+        query: sanitizeQuery(context.parameters?.q),
+        pageSize: 50,
+        durationMs: Date.now() - startedAt,
+        timestamp: new Date().toISOString(),
+      },
     });
   }
 };
@@ -179,6 +259,12 @@ async function runRecentStep({ supabase, supplier, pageSize, cursor }) {
     throw new Error(`Recent step failed: ${error.message}`);
   }
 
+  // Handle null/undefined data gracefully
+  if (!data) {
+    console.warn("Recent step returned null data, returning empty result");
+    return emptyStep("RECENT");
+  }
+
   return paginate(data, limit, "RECENT");
 }
 
@@ -217,6 +303,12 @@ async function runSkuStep({ supabase, supplier, supplierConfig, query, pageSize,
     throw new Error(`SKU step failed: ${error.message}`);
   }
 
+  // Handle null/undefined data gracefully
+  if (!data) {
+    console.warn("SKU step returned null data, returning empty result");
+    return emptyStep("SKU");
+  }
+
   return paginate(data, limit, "SKU");
 }
 
@@ -252,6 +344,12 @@ async function runFuzzyStep({ supabase, supplier, supplierConfig, query, pageSiz
   if (error) {
     console.error("Fuzzy step failed", error);
     throw new Error(`Fuzzy step failed: ${error.message}`);
+  }
+
+  // Handle null/undefined data gracefully
+  if (!data) {
+    console.warn("Fuzzy step returned null data, returning empty result");
+    return emptyStep("FUZZY");
   }
 
   return paginate(data, limit, "FUZZY");

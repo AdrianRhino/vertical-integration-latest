@@ -71,6 +71,10 @@
   "beaconOrderSandbox": {
     "file": "suppliers/order/beaconOrder.js",
     "secrets": []
+  },
+  "sendOrderToSupplier": {
+    "file": "suppliers/order/sendOrderToSupplier.js",
+    "secrets": []
   }
 } 
 }

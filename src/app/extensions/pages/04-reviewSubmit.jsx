@@ -211,6 +211,16 @@ const ReviewSubmit = ({
     );
     return sumTotalPrice;
   }, [fullOrder.fullOrderItems, parsedOrder?.fullOrderItems, setFullOrder]);
+
+  const sendOrderToSupplier = async () => {
+    const orderPayload = buildOrderPayload();
+    const response = await hubspot.serverless("sendOrderToSupplier", {
+      parameters: {
+        fullOrder: orderPayload,
+      },
+    });
+    console.log("response", response);
+  };
     
 
   return (
@@ -352,6 +362,7 @@ const ReviewSubmit = ({
           <ButtonRow>
             <Button variant="primary" onClick={() => {
               sendOrderToHubspot();
+              sendOrderToSupplier();
               setOrderPage(5);
               }}>
               Submit Order
