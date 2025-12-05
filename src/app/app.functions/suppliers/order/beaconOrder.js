@@ -14,7 +14,122 @@ const https = require("https");
 const { CookieJar } = require('tough-cookie');
 const { wrapper } = require('axios-cookiejar-support');
 const { formatOrder } = require("./formatOrder");
+const { normalizeInput } = require("./normalizeInput");
 const { getCredentials } = require("../config/getCredentials");
+
+/**
+ * Build hardcoded test payload for Beacon sandbox testing
+ * Maintains exact structure required by Beacon API
+ */
+function buildHardcodedTestPayload(orderBody) {
+    return {
+        "accountId": "557799", // Hardcoded - Should be dynamic
+        "apiSiteId": "UAT", // Hardcoded - Related to "UAT" in auth?
+        "job": {
+          "checked": false, // Default
+          // Truncate deal_object_id to ensure jobName is <= 15 characters
+          "jobName": `DEAL-001-TEST`, // Add order number to job name
+          // Ensure the random part is always a single digit (0-9)
+          //"jobNumber": `${String(orderInfo.deal_object_id).slice(-5)}-${Math.floor(Math.random()*10)}`
+          "jobNumber": "999"
+        },
+        "purchaseOrderNo": `TEST-PO-001`, // Unique PO
+        "lineItems": [
+            {
+                "itemNumber": "315692",
+                "quantity": 1,
+                "unitOfMeasure": "EA",
+                "description": "Test Order",
+                "lineComments": "This is a test order. Please void.",
+                "productNumber": "315692"
+            }
+        ],
+        "shipping": {
+          "shippingMethod": "D", // Default to 'D' (Delivery)
+          "shippingBranch": "300", // Hardcoded - Should be dynamic
+          "address": {
+            "address1": `${orderBody?.delivery?.address_line_1 || "Test Street 1"}`,
+            "address2": `${orderBody?.delivery?.address_line_2 || ""}`,
+            "address3": null,
+            "city": `${orderBody?.delivery?.city || "City 1"}`,
+            "postalCode": `${orderBody?.delivery?.zip_code || "12345"}`,
+            "state": `${orderBody?.delivery?.state || "CA"}`,
+            "country": "USA"
+          }
+        },
+        "specialInstruction": "This is a test order. Please void. " + (orderBody?.delivery?.notes || ""),
+        "pickupDate": `${orderBody?.delivery?.date || ""}`, // Ensure this format is correct for Beacon
+        "pickupTime": `${orderBody?.delivery?.time || "Anytime"}`, // Default if missing
+    };
+}
+
+/**
+ * Build payload dynamically based on environment and parameters
+ * Maintains EXACT same structure as hardcoded version
+ */
+function buildPayload(context, credentials, orderBody) {
+    const { useTestPayload } = context.parameters || {};
+    const isSandbox = credentials.environment === "sandbox";
+    
+    // Sandbox: Default to hardcoded test unless useTestPayload is explicitly false
+    // Production: Always use orderBody
+    if (isSandbox && useTestPayload !== false) {
+        return buildHardcodedTestPayload(orderBody);
+    }
+    
+    // Production or sandbox with useTestPayload=false → use orderBody
+    if (!orderBody) {
+        const errorMsg = isSandbox 
+            ? "orderBody is required when useTestPayload is false in sandbox"
+            : "orderBody is required for production orders";
+        throw new Error(errorMsg);
+    }
+    
+    // Normalize and format
+    const normalized = normalizeInput(orderBody);
+    if (!normalized) {
+        throw new Error("Failed to normalize order input");
+    }
+    
+    const formatted = formatOrder(normalized, "BEACON", credentials.environment);
+    
+    // formatOrder returns object for BEACON (not array like ABC)
+    // Map formatted output to EXACT same structure as hardcoded version
+    const payload = {
+        accountId: formatted.accountId || "557799",
+        apiSiteId: formatted.apiSiteId || (credentials.apiSiteId && credentials.apiSiteId.trim() !== "" ? credentials.apiSiteId : "UAT"),
+        job: {
+            checked: formatted.job?.checked || false,
+            jobName: formatted.job?.jobName || `DEAL-001-TEST`,
+            jobNumber: formatted.job?.jobNumber || "999"
+        },
+        purchaseOrderNo: formatted.purchaseOrderNo || `PO-${Date.now()}`,
+        lineItems: formatted.lineItems || [],
+        shipping: {
+            shippingMethod: formatted.shipping?.shippingMethod || "D",
+            shippingBranch: formatted.shipping?.shippingBranch || "300",
+            address: {
+                address1: formatted.shipping?.address?.address1 || "",
+                address2: formatted.shipping?.address?.address2 || "",
+                address3: formatted.shipping?.address?.address3 || null,
+                city: formatted.shipping?.address?.city || "",
+                postalCode: formatted.shipping?.address?.postalCode || "",
+                state: formatted.shipping?.address?.state || "",
+                country: formatted.shipping?.address?.country || "USA"
+            }
+        },
+        specialInstruction: formatted.specialInstruction || "",
+        pickupDate: formatted.pickupDate || "",
+        pickupTime: formatted.pickupTime || "Anytime"
+    };
+    
+    // Only include apiSiteId if it's configured and not empty
+    if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
+        payload.apiSiteId = credentials.apiSiteId;
+    }
+    
+    return payload;
+}
 
 /**
  * Checks if URL requires SSL bypass (dev/UAT environments)
@@ -242,49 +357,14 @@ exports.main = async (context = {}) => {
         // Step 2: Submit order with authentication
         const orderUrl = `${credentials.apiBaseUrl}/v1/rest/com/becn/submitOrder`;
         
-        const payload = {
-            "accountId": "557799", // Hardcoded - Should be dynamic
-            "apiSiteId": "UAT", // Hardcoded - Related to "UAT" in auth?
-            "job": {
-              "checked": false, // Default
-              // Truncate deal_object_id to ensure jobName is <= 15 characters
-              "jobName": `DEAL-001-TEST`, // Add order number to job name
-              // Ensure the random part is always a single digit (0-9)
-              //"jobNumber": `${String(orderInfo.deal_object_id).slice(-5)}-${Math.floor(Math.random()*10)}`
-              "jobNumber": "999"
-            },
-            "purchaseOrderNo": `TEST-PO-001`, // Unique PO
-            "lineItems": [
-                {
-                    "itemNumber": "315692",
-                    "quantity": 1,
-                    "unitOfMeasure": "EA",
-                    "description": "Test Order",
-                    "lineComments": "This is a test order. Please void.",
-                    "productNumber": "315692"
-                }
-            ],
-            "shipping": {
-              "shippingMethod": "D", // Default to 'D' (Delivery)
-              "shippingBranch": "300", // Hardcoded - Should be dynamic
-              "address": {
-                "address1": `${orderBody?.delivery?.address_line_1 || "Test Street 1"}`,
-                "address2": `${orderBody?.delivery?.address_line_2 || ""}`,
-                "address3": null,
-                "city": `${orderBody?.delivery?.city || "City 1"}`,
-                "postalCode": `${orderBody?.delivery?.zip_code || "12345"}`,
-                "state": `${orderBody?.delivery?.state || "CA"}`,
-                "country": "USA"
-              }
-            },
-            "specialInstruction": "This is a test order. Please void. " + (orderBody?.delivery?.notes || ""),
-            "pickupDate": `${orderBody?.delivery?.date || ""}`, // Ensure this format is correct for Beacon
-            "pickupTime": `${orderBody?.delivery?.time || "Anytime"}`, // Default if missing
-        };
-
-        // Only include apiSiteId in order payload if it's configured and not empty
-        if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
-            payload.apiSiteId = credentials.apiSiteId;
+        // Build payload dynamically based on environment and flags
+        const payload = buildPayload(context, credentials, orderBody);
+        
+        // Log payload for sandbox verification
+        if (credentials.environment === "sandbox") {
+            console.log("=== BEACON SANDBOX ORDER PAYLOAD ===");
+            console.log(JSON.stringify(payload, null, 2));
+            console.log("=== END BEACON SANDBOX ORDER PAYLOAD ===");
         }
 
         console.log("Submitting order to:", orderUrl);
