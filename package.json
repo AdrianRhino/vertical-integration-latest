@@ -5,6 +5,7 @@
     "axios": "^1.13.1",
     "axios-cookiejar-support": "^6.0.5",
     "localforage": "^1.10.0",
+    "pdfkit": "^0.17.2",
     "qs": "^6.14.0",
     "tough-cookie": "^6.0.0"
   }

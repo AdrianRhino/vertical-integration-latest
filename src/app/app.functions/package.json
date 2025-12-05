@@ -7,6 +7,7 @@
     "@hubspot/api-client": "^7.0.1",
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^0.27.2",
+    "pdfkit": "^0.14.0",
     "qs": "^6.11.2"
   }
 }
