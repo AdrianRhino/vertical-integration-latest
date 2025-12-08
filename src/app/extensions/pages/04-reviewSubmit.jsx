@@ -298,7 +298,7 @@ const ReviewSubmit = ({
         if (isHubSpotFileUrl) {
           console.log("✅ HubSpot PDF file URL saved to order_pdf property successfully");
         } else {
-          console.log("✅ PDF data URL saved to order_pdf property (upload failed, using fallback)");
+          console.log("✅ PDF data URL saved to order_pdf property (upload failed, using fallback) ");
           console.warn("⚠️ NOTE: Data URLs are very large. Consider fixing PDF upload to use HubSpot Files API.");
         }
       } catch (error) {
