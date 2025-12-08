@@ -40,6 +40,7 @@ exports.main = async (context = {}) => {
     total: fullOrder?.orderTotal?.toString(),
     last_saved_at: new Date().toISOString(),
     placed_order_address: fullOrder?.placed_order_address || "",
+    order_url: fullOrder?.pdfUrl || fullOrder?.order_url || "", // Add PDF URL if available (changed from order_pdf to order_url)
   };
 
   try {

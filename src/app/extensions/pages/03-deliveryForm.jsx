@@ -97,7 +97,6 @@ useEffect(() => {
         onEdit={() => setIsAddressEditing(true)}
         onSave={() => setIsAddressEditing(false)}
       />
-      <Button onClick={() => console.log("Full Order:", fullOrder)}>Print Order For Testing</Button>
     </>
   );
 };

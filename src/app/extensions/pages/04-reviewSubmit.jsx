@@ -157,17 +157,21 @@ const ReviewSubmit = ({
   };
 
   const sendOrderToHubspot = async () => {
+    let orderIdToReturn = null;
     if (parsedOrder && fullOrder.selectedOrderId) {
       // Using existing order - update its status
-      setSubmitStatus("Submitted", fullOrder.selectedOrderId);
+      orderIdToReturn = fullOrder.selectedOrderId;
+      await setSubmitStatus("Submitted", orderIdToReturn);
       sendAlert({ message: "Order updated successfully", type: "success" });
     } else {
       // Creating new order - save then update status
       // Pass false to suppress the "saved as draft" alert since we'll show "Order created successfully" instead
       const newOrderId = await sendDraftToHubspot(false);
-      setSubmitStatus("Submitted", newOrderId);
+      orderIdToReturn = newOrderId;
+      await setSubmitStatus("Submitted", newOrderId);
       sendAlert({ message: "Order created successfully", type: "success" });
     }
+    return orderIdToReturn;
   };
 
   const setSubmitStatus = async (status, orderId) => {
@@ -212,14 +216,117 @@ const ReviewSubmit = ({
     return sumTotalPrice;
   }, [fullOrder.fullOrderItems, parsedOrder?.fullOrderItems, setFullOrder]);
 
-  const sendOrderToSupplier = async () => {
+  const sendOrderToSupplier = async (orderIdForPDF) => {
     const orderPayload = buildOrderPayload();
+    
+    // Include orderId in the payload so PDF upload can associate with it
+    if (orderIdForPDF) {
+      orderPayload.orderId = orderIdForPDF;
+      orderPayload.selectedOrderId = orderIdForPDF;
+    }
+    
     const response = await hubspot.serverless("sendOrderToSupplier", {
       parameters: {
         fullOrder: orderPayload,
+        dealId: context.crm.objectId, // Pass dealId for PDF association
       },
     });
-    console.log("response", response);
+    
+    console.log("=== sendOrderToSupplier FULL RESPONSE ===");
+    console.log(JSON.stringify(response, null, 2));
+    
+    // Extract PDF URL from response - check multiple possible locations
+    const pdfUrl = response.body?.pdfUrl || 
+                   response.body?.body?.pdfUrl || 
+                   response?.pdfUrl;
+    
+    const orderIdToUpdate = orderIdForPDF || fullOrder.selectedOrderId || orderId;
+    
+    console.log("=== PDF URL EXTRACTION DEBUG ===");
+    console.log({
+      pdfUrl: pdfUrl,
+      pdfUrlType: typeof pdfUrl,
+      isDataUrl: pdfUrl?.startsWith?.('data:'),
+      isHubSpotUrl: pdfUrl?.includes?.('hubspotusercontent'),
+      orderIdToUpdate: orderIdToUpdate,
+      orderIdForPDF: orderIdForPDF,
+      fullOrderSelectedOrderId: fullOrder.selectedOrderId,
+      orderIdState: orderId,
+      responseBodyKeys: response.body ? Object.keys(response.body) : 'no body',
+      responseBody: response.body
+    });
+    
+    // Check if URL is a valid HubSpot file URL (preferred) or data URL (fallback for text properties)
+    const isHubSpotFileUrl = pdfUrl && 
+                             typeof pdfUrl === 'string' && 
+                             !pdfUrl.startsWith('data:') && 
+                             (pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://')) &&
+                             (pdfUrl.includes('hubspotusercontent') || pdfUrl.includes('hubapi.com') || pdfUrl.includes('cdn2.hubspot'));
+    
+    const isDataUrl = pdfUrl && typeof pdfUrl === 'string' && pdfUrl.startsWith('data:application/pdf;base64,');
+    
+    // If property is single-line text, we can save data URLs (though not ideal)
+    // If property is URL type, only save HTTP/HTTPS URLs
+    // For now, allow both but prefer HubSpot file URLs
+    const canSaveUrl = (isHubSpotFileUrl || isDataUrl) && orderIdToUpdate;
+    
+    // If PDF URL exists (HubSpot file URL or data URL), update the order
+    if (canSaveUrl) {
+      try {
+        if (isHubSpotFileUrl) {
+          console.log("=== ATTEMPTING TO SAVE HUBSPOT PDF FILE URL ===");
+        } else if (isDataUrl) {
+          console.log("=== ATTEMPTING TO SAVE PDF DATA URL (fallback) ===");
+          console.warn("⚠️ Saving data URL - PDF upload to HubSpot Files API failed. Check serverless logs for details.");
+        }
+        console.log({ 
+          pdfUrl: pdfUrl.substring(0, 100) + (pdfUrl.length > 100 ? '...' : ''), 
+          orderId: orderIdToUpdate,
+          urlType: isHubSpotFileUrl ? 'HubSpot File URL' : isDataUrl ? 'Data URL' : 'Unknown'
+        });
+        
+        const updateResponse = await hubspot.serverless("setSubmitStatus", {
+          parameters: {
+            status: "Submitted", // Maintain status
+            orderId: orderIdToUpdate,
+            pdfUrl: pdfUrl, // Pass PDF URL to save in order_pdf property
+          },
+        });
+        
+        console.log("=== setSubmitStatus RESPONSE ===");
+        console.log(JSON.stringify(updateResponse, null, 2));
+        if (isHubSpotFileUrl) {
+          console.log("✅ HubSpot PDF file URL saved to order_pdf property successfully");
+        } else {
+          console.log("✅ PDF data URL saved to order_pdf property (upload failed, using fallback)");
+          console.warn("⚠️ NOTE: Data URLs are very large. Consider fixing PDF upload to use HubSpot Files API.");
+        }
+      } catch (error) {
+        console.error("❌ Failed to save PDF URL to order:", error);
+        console.error("Error details:", error.response || error.message);
+        console.error("Full error:", JSON.stringify(error, null, 2));
+      }
+    } else {
+      if (!pdfUrl) {
+        console.warn("⚠️ No PDF URL found in response");
+      } else if (!isHubSpotFileUrl && !isDataUrl) {
+        console.warn("⚠️ PDF URL format not recognized:", pdfUrl?.substring(0, 100));
+      }
+      if (!orderIdToUpdate) {
+        console.warn("⚠️ No orderId available to update");
+      }
+      console.warn("⚠️ Cannot save PDF URL - missing data:", {
+        hasPdfUrl: !!pdfUrl,
+        isHubSpotFileUrl: isHubSpotFileUrl,
+        isDataUrl: isDataUrl,
+        hasOrderId: !!orderIdToUpdate,
+        pdfUrl: pdfUrl ? pdfUrl.substring(0, 100) + '...' : null,
+        orderId: orderIdToUpdate,
+        responseBody: response.body
+      });
+    }
+    
+    return response;
   };
     
 
@@ -360,10 +467,19 @@ const ReviewSubmit = ({
         <>
           {" "}
           <ButtonRow>
-            <Button variant="primary" onClick={() => {
-              sendOrderToHubspot();
-              sendOrderToSupplier();
-              setOrderPage(5);
+            <Button variant="primary" onClick={async () => {
+              try {
+                // Step 1: Create/update order in HubSpot and get orderId
+                const orderId = await sendOrderToHubspot();
+                
+                // Step 2: Send order to supplier (generates PDF) and save PDF URL
+                await sendOrderToSupplier(orderId);
+                
+                setOrderPage(5);
+              } catch (error) {
+                console.error("Error submitting order:", error);
+                sendAlert({ message: "Error submitting order. Please try again.", type: "error" });
+              }
               }}>
               Submit Order
             </Button>

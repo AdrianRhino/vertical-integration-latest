@@ -95,12 +95,29 @@ async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = 
         try {
           const result = JSON.parse(data);
           
+          console.log('=== HUBSPOT FILES API PARSED RESPONSE ===');
+          console.log('Status Code:', res.statusCode);
+          console.log('Response keys:', Object.keys(result));
+          console.log('Full response:', JSON.stringify(result, null, 2));
+          
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            const fileUrl = result.url || result.objects?.[0]?.url;
-            const fileId = result.id || result.objects?.[0]?.id;
+            const fileUrl = result.url || result.objects?.[0]?.url || result.data?.url;
+            const fileId = result.id || result.objects?.[0]?.id || result.data?.id;
+            
+            console.log('Extracted fileUrl:', fileUrl);
+            console.log('Extracted fileId:', fileId);
             
             if (!fileUrl && !fileId) {
-              console.warn('Unexpected response structure:', result);
+              console.error('❌ Unexpected response structure - no URL or ID found');
+              console.error('Response structure:', JSON.stringify(result, null, 2));
+              reject(new Error(`HubSpot API returned success but no file URL or ID. Response: ${JSON.stringify(result)}`));
+              return;
+            }
+            
+            if (!fileUrl) {
+              console.error('❌ No file URL in response, only fileId:', fileId);
+              reject(new Error(`HubSpot API returned file ID but no URL. File ID: ${fileId}`));
+              return;
             }
             
             // Associate with order if orderId provided
@@ -117,13 +134,27 @@ async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = 
               });
             }
             
+            // Ensure URL is a valid HTTP/HTTPS URL
+            let validUrl = fileUrl;
+            if (fileUrl && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+              // HubSpot Files API URLs should already be https://, but ensure it's valid
+              validUrl = fileUrl.startsWith('//') ? `https:${fileUrl}` : `https://${fileUrl}`;
+              console.log('Normalized PDF URL:', { original: fileUrl, normalized: validUrl });
+            }
+            
+            console.log('✅ PDF upload successful, returning URL:', validUrl);
             resolve({
-              url: fileUrl,
+              url: validUrl,
               fileId: fileId,
               success: true
             });
           } else {
-            const errorMsg = result.message || result.error || `HTTP ${res.statusCode}`;
+            const errorMsg = result.message || result.error || result.errors?.[0]?.message || `HTTP ${res.statusCode}`;
+            console.error('❌ HubSpot API error response:', {
+              statusCode: res.statusCode,
+              error: errorMsg,
+              fullResponse: result
+            });
             reject(new Error(`HubSpot API error (${res.statusCode}): ${errorMsg}`));
           }
         } catch (parseError) {

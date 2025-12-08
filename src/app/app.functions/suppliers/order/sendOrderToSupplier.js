@@ -53,7 +53,7 @@ function getOrderFunction(supplier) {
 
 exports.main = async (context = {}) => {
   try {
-    const { fullOrder, environment } = context.parameters || {};
+    const { fullOrder, environment, dealId } = context.parameters || {};
     
     // Filter: Validate fullOrder exists
     if (!fullOrder) {
@@ -104,7 +104,7 @@ exports.main = async (context = {}) => {
       confirmationNumber: result.confirmationNumber
     });
     
-    // Generate PDF and return as data URL if order submission was successful
+    // Generate PDF and upload to HubSpot if order submission was successful
     if (result.success && generateOrderPDF) {
       try {
         const orderNumber = fullOrder.orderId || fullOrder.ticket || `ORD-${Date.now()}`;
@@ -113,17 +113,69 @@ exports.main = async (context = {}) => {
         console.log('Generating order PDF...');
         const pdfBuffer = await generateOrderPDF(fullOrder, result);
         
-        // Convert PDF buffer to base64 data URL
-        const base64PDF = pdfBuffer.toString('base64');
-        const pdfDataUrl = `data:application/pdf;base64,${base64PDF}`;
+        // Upload PDF to HubSpot Files API if uploadPDFToHubspot is available
+        if (uploadPDFToHubspot) {
+          try {
+            const orderId = fullOrder.orderId || fullOrder.selectedOrderId || null;
+            
+            console.log('=== ATTEMPTING PDF UPLOAD TO HUBSPOT ===');
+            console.log('Upload parameters:', {
+              fileName,
+              orderId,
+              dealId,
+              pdfSize: pdfBuffer.length,
+              bufferType: Buffer.isBuffer(pdfBuffer) ? 'Buffer' : typeof pdfBuffer
+            });
+            
+            const uploadResult = await uploadPDFToHubspot(
+              pdfBuffer, 
+              fileName, 
+              orderId, 
+              dealId
+            );
+            
+            console.log('=== PDF UPLOAD RESULT ===');
+            console.log('Full upload result:', JSON.stringify(uploadResult, null, 2));
+            console.log('Upload result keys:', uploadResult ? Object.keys(uploadResult) : 'null');
+            console.log('Has URL:', !!uploadResult?.url);
+            console.log('URL value:', uploadResult?.url);
+            
+            if (uploadResult && uploadResult.url) {
+              result.pdfUrl = uploadResult.url; // Real HubSpot file URL
+              result.pdfFileId = uploadResult.fileId;
+              console.log('✅ PDF uploaded successfully to HubSpot:', uploadResult.url);
+            } else {
+              // Fall back to data URL if upload didn't return URL
+              console.error('❌ PDF upload did not return a URL');
+              console.error('Upload result structure:', uploadResult);
+              const base64PDF = pdfBuffer.toString('base64');
+              result.pdfUrl = `data:application/pdf;base64,${base64PDF}`;
+              result.pdfUploadFailed = true;
+              result.pdfUploadError = 'Upload succeeded but no URL returned';
+              console.warn('⚠️ Falling back to data URL. Upload result:', uploadResult);
+            }
+          } catch (uploadError) {
+            console.error('❌ PDF UPLOAD FAILED WITH ERROR');
+            console.error('Error message:', uploadError.message);
+            console.error('Error stack:', uploadError.stack);
+            console.error('Full error:', JSON.stringify(uploadError, Object.getOwnPropertyNames(uploadError), 2));
+            
+            // Fall back to data URL if upload fails
+            const base64PDF = pdfBuffer.toString('base64');
+            result.pdfUrl = `data:application/pdf;base64,${base64PDF}`;
+            result.pdfUploadFailed = true;
+            result.pdfUploadError = uploadError.message;
+            console.warn('⚠️ Falling back to data URL due to upload error');
+          }
+        } else {
+          // Fall back to data URL if upload module not available
+          console.warn('⚠️ PDF upload module (uploadPDFToHubspot) is not available');
+          const base64PDF = pdfBuffer.toString('base64');
+          result.pdfUrl = `data:application/pdf;base64,${base64PDF}`;
+          result.pdfUploadFailed = true;
+          result.pdfUploadError = 'Upload module not available';
+        }
         
-        // Log PDF data URL to console (truncated for readability)
-        console.log('Order PDF Data URL (base64):', pdfDataUrl.substring(0, 100) + '...');
-        console.log('Order PDF Size:', pdfBuffer.length, 'bytes');
-        console.log('Full PDF Data URL available in response.pdfUrl');
-        
-        // Include PDF data URL in response
-        result.pdfUrl = pdfDataUrl;
         result.pdfFileName = fileName;
         result.pdfSize = pdfBuffer.length;
         
@@ -140,7 +192,18 @@ exports.main = async (context = {}) => {
       result.pdfWarning = 'PDF generation not available - pdfkit module not installed';
     }
     
-    return result;
+    // Log final result before returning
+    console.log("=== sendOrderToSupplier FINAL RESULT ===");
+    console.log("Result keys:", Object.keys(result));
+    console.log("PDF URL in result:", result.pdfUrl);
+    console.log("Result success:", result.success);
+    console.log("Full result:", JSON.stringify(result, null, 2));
+    
+    // Return in proper serverless function format
+    return {
+      statusCode: 200,
+      body: result
+    };
     
   } catch (error) {
     console.error('Error in sendOrderToSupplier:', {
@@ -150,9 +213,12 @@ exports.main = async (context = {}) => {
     });
     
     return {
-      success: false,
-      message: 'Failed to send order to supplier',
-      error: error.message || 'Unknown error occurred'
+      statusCode: 500,
+      body: {
+        success: false,
+        message: 'Failed to send order to supplier',
+        error: error.message || 'Unknown error occurred'
+      }
     };
   }
 };
