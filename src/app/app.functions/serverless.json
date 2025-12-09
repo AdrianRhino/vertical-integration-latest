@@ -75,6 +75,10 @@
   "sendOrderToSupplier": {
     "file": "suppliers/order/sendOrderToSupplier.js",
     "secrets": ["HUBSPOT_API_KEY"]
+  },
+  "testPDFUpload": {
+    "file": "testPDFUpload.js",
+    "secrets": ["HUBSPOT_API_KEY"]
   }
 } 
 }

@@ -3,8 +3,8 @@ const axios = require("axios"); // Added axios for V4 associations
 exports.main = async (context = {}) => {
     const { status, orderId, pdfUrl } = context.parameters || {};
     
-    // Support both order_pdf and order_url property names
-    const pdfPropertyName = 'order_url'; // Changed from order_pdf to order_url
+    // Property name for storing PDF URL in HubSpot order object
+    const pdfPropertyName = 'order_PDF';
 
     if (!status) {
         return {
@@ -68,7 +68,7 @@ exports.main = async (context = {}) => {
                 }
             }
         } else {
-            console.log("⚠️ No PDF URL provided, skipping order_pdf update");
+            console.log(`⚠️ No PDF URL provided, skipping ${pdfPropertyName} update`);
         }
         
         console.log("=== PROPERTIES TO UPDATE ===");

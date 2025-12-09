@@ -487,7 +487,52 @@ const ReviewSubmit = ({
               Save as Draft
             </Button>
           </ButtonRow>
-          <Button variant="secondary" onClick={() => setOrderPage(8)}>Go to Testing Panel</Button>
+          <ButtonRow>
+            <Button 
+              variant="secondary" 
+              onClick={async () => {
+                try {
+                  console.log('🧪 Testing PDF generation and upload...');
+                  sendAlert({ message: "Testing PDF upload...", type: "info" });
+                  
+                  const response = await hubspot.serverless("testPDFUpload", {
+                    parameters: {
+                      orderId: fullOrder.selectedOrderId || orderId || null,
+                      dealId: context.crm.objectId
+                    }
+                  });
+                  
+                  console.log('=== TEST PDF UPLOAD RESPONSE ===');
+                  console.log(JSON.stringify(response, null, 2));
+                  
+                  if (response.body?.success) {
+                    const message = `✅ PDF uploaded successfully!\nURL: ${response.body.pdfUrl}\nSize: ${response.body.pdfSizeKB} KB`;
+                    console.log(message);
+                    sendAlert({ 
+                      message: `PDF uploaded successfully! URL: ${response.body.pdfUrl.substring(0, 50)}...`, 
+                      type: "success" 
+                    });
+                  } else {
+                    const errorMsg = response.body?.error || response.body?.message || 'Unknown error';
+                    console.error('❌ Test failed:', errorMsg);
+                    sendAlert({ 
+                      message: `Test failed: ${errorMsg}`, 
+                      type: "error" 
+                    });
+                  }
+                } catch (error) {
+                  console.error('❌ Test error:', error);
+                  sendAlert({ 
+                    message: `Test error: ${error.message}`, 
+                    type: "error" 
+                  });
+                }
+              }}
+            >
+              🧪 Test PDF Upload
+            </Button>
+            <Button variant="secondary" onClick={() => setOrderPage(8)}>Go to Testing Panel</Button>
+          </ButtonRow>
         </>
       )}
     </>

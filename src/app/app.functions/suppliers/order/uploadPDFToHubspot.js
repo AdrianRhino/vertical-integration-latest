@@ -3,13 +3,23 @@
  * 
  * Input: PDF buffer, filename, optional orderId and dealId
  * Filter: Validates PDF buffer and API key exist
- * Transform: Converts buffer to base64, formats upload request
- * Store: Uploads to HubSpot Files API
+ * Transform: Formats multipart/form-data request with file buffer (per HubSpot API spec)
+ * Store: Uploads to HubSpot Files API using multipart/form-data via axios
  * Output: File URL and file ID
  * Loop: Self-healing - returns error info if upload fails
+ * 
+ * Required HubSpot API Scopes:
+ * - files.ui_hidden.read_write (Files API access)
+ * - crm.objects.custom.read (if associating with custom objects)
+ * 
+ * API Reference: https://developers.hubspot.com/docs/api-reference/files-files-v3/files/post-files-v3-files
+ * 
+ * Note: HubSpot Files API v3 requires multipart/form-data, not JSON with base64.
+ * This implementation uses axios with form-data library (simpler than native https).
  */
 
-const https = require('https');
+const axios = require('axios');
+const FormData = require('form-data');
 
 /**
  * Upload PDF to HubSpot Files API
@@ -17,21 +27,29 @@ const https = require('https');
  * @param {string} fileName - Name for the file
  * @param {string} orderId - Optional order ID for association
  * @param {string} dealId - Optional deal ID for association
+ * @param {string} folderPath - Optional folder path (e.g., '/orders'). Defaults to '/orders'. Either folderPath or folderId must be provided.
+ * @param {string} folderId - Optional folder ID. If provided, takes precedence over folderPath.
  * @returns {Promise<Object>} Object with url and fileId
  */
-async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = null) {
-  return new Promise((resolve, reject) => {
+async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = null, folderPath = '/orders', folderId = null) {
+  try {
     const apiKey = process.env.HUBSPOT_API_KEY;
     
     if (!apiKey) {
-      console.error('HUBSPOT_API_KEY check:', {
+      console.error('❌ HUBSPOT_API_KEY check:', {
         hasKey: !!apiKey,
         keyLength: apiKey ? apiKey.length : 0,
         envKeys: Object.keys(process.env).filter(k => k.includes('HUBSPOT'))
       });
-      reject(new Error('HUBSPOT_API_KEY environment variable is not set. Make sure it is added to secrets in serverless.json'));
-      return;
+      throw new Error('HUBSPOT_API_KEY environment variable is not set. Make sure it is added to secrets in serverless.json and has Files API permissions (files.ui_hidden.read_write scope)');
     }
+    
+    // Log API key validation (without exposing the key)
+    console.log('✅ API key validated:', {
+      hasKey: !!apiKey,
+      keyLength: apiKey.length,
+      keyPrefix: apiKey.substring(0, 8) + '...'
+    });
     
     console.log('Uploading PDF to HubSpot:', {
       fileName,
@@ -41,140 +59,164 @@ async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = 
     });
     
     if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
-      reject(new Error('Invalid PDF buffer provided'));
-      return;
+      throw new Error('Invalid PDF buffer provided');
     }
     
-    // Convert buffer to base64
-    const base64Content = pdfBuffer.toString('base64');
+    // Create multipart/form-data payload per HubSpot Files API v3 specification
+    // Reference: https://developers.hubspot.com/docs/api-reference/files-files-v3/files/post-files-v3-files
+    // Based on working example that uses axios
+    const form = new FormData();
     
-    const payload = JSON.stringify({
-      name: fileName,
-      access: 'PUBLIC_NOT_INDEXABLE',
-      base64Encoding: base64Content,
-      encoding: 'base64',
-      fileName: fileName,
-      mimeType: 'application/pdf',
+    // Add file buffer as 'file' field (using Buffer.from to ensure it's a Buffer)
+    form.append('file', Buffer.from(pdfBuffer), {
+      filename: fileName,
+      contentType: 'application/pdf'
     });
     
-    const options = {
-      hostname: 'api.hubapi.com',
-      path: '/files/v3/files',
-      method: 'POST',
+    // Add charsetHunch (optional but included in working example)
+    form.append('charsetHunch', 'UTF-8');
+    
+    // Add folderId or folderPath (required by HubSpot API - either folderId or folderPath must be provided)
+    // folderId takes precedence if both are provided
+    if (folderId) {
+      form.append('folderId', folderId);
+      console.log('✅ Added folderId to form:', folderId);
+    } else {
+      // Use provided folderPath or default to '/orders'
+      const finalFolderPath = folderPath || '/orders';
+      form.append('folderPath', finalFolderPath);
+      console.log('✅ Added folderPath to form:', finalFolderPath);
+    }
+    
+    // Add fileName field
+    form.append('fileName', fileName);
+    
+    // Add options as JSON string (access level and other settings)
+    const optionsJson = JSON.stringify({
+      access: 'PUBLIC_NOT_INDEXABLE'
+    });
+    form.append('options', optionsJson);
+    
+    // Verify all required fields are added
+    console.log('✅ All form fields added:', {
+      folderId: folderId || null,
+      folderPath: folderId ? null : (folderPath || '/orders'),
+      fileName: fileName,
+      hasFile: true,
+      hasOptions: true,
+      hasCharsetHunch: true
+    });
+    
+    console.log('Multipart form data prepared:', {
+      fileName,
+      fileSize: pdfBuffer.length,
+      folderId: folderId || null,
+      folderPath: folderId ? null : (folderPath || '/orders'),
+      access: 'PUBLIC_NOT_INDEXABLE',
+      contentType: 'application/pdf'
+    });
+    
+    // Upload the file to HubSpot Files API using axios (simpler than native https)
+    console.log('Sending request to HubSpot Files API...');
+    const uploadResponse = await axios.post('https://api.hubapi.com/files/v3/files', form, {
       headers: {
+        ...form.getHeaders(), // Get headers from FormData (includes Content-Type with boundary)
         'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
       },
+      maxBodyLength: Infinity, // Allow large file uploads
+      maxContentLength: Infinity
+    });
+    
+    console.log('=== HUBSPOT FILES API RESPONSE ===');
+    console.log('Status Code:', uploadResponse.status);
+    console.log('Response keys:', Object.keys(uploadResponse.data));
+    console.log('Full response:', JSON.stringify(uploadResponse.data, null, 2));
+    
+    // Extract file URL and ID from response
+    const fileUrl = uploadResponse.data.url;
+    const fileId = uploadResponse.data.id;
+    
+    console.log('Extracted fileUrl:', fileUrl);
+    console.log('Extracted fileId:', fileId);
+    
+    if (!fileUrl) {
+      console.error('❌ No file URL in response');
+      console.error('Response structure:', JSON.stringify(uploadResponse.data, null, 2));
+      throw new Error(`HubSpot API returned success but no file URL. Response: ${JSON.stringify(uploadResponse.data)}`);
+    }
+    
+    // Associate with order if orderId provided (non-blocking)
+    if (orderId && fileId) {
+      associateFileWithOrder(fileId, orderId).catch(err => {
+        console.warn('Failed to associate file with order:', err.message);
+      });
+    }
+    
+    // Associate with deal if dealId provided (non-blocking)
+    if (dealId && fileId) {
+      associateFileWithDeal(fileId, dealId).catch(err => {
+        console.warn('Failed to associate file with deal:', err.message);
+      });
+    }
+    
+    // Ensure URL is a valid HTTP/HTTPS URL
+    let validUrl = fileUrl;
+    if (fileUrl && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+      validUrl = fileUrl.startsWith('//') ? `https:${fileUrl}` : `https://${fileUrl}`;
+      console.log('Normalized PDF URL:', { original: fileUrl, normalized: validUrl });
+    }
+    
+    console.log('✅ PDF upload successful, returning URL:', validUrl);
+    return {
+      url: validUrl,
+      fileId: fileId,
+      success: true
     };
     
-    const req = https.request(options, (res) => {
-      let data = '';
+  } catch (error) {
+    // Handle axios errors
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      const statusCode = error.response.status;
+      const errorMsg = error.response.data?.message || error.response.data?.error || error.response.data?.errors?.[0]?.message || `HTTP ${statusCode}`;
       
-      res.on('data', (chunk) => {
-        data += chunk;
+      console.error('❌ HubSpot API error response:', {
+        statusCode: statusCode,
+        error: errorMsg,
+        fullResponse: error.response.data,
+        headers: error.response.headers
       });
       
-      res.on('end', () => {
-        // Log response for debugging
-        console.log('HubSpot Files API Response:', {
-          statusCode: res.statusCode,
-          headers: res.headers,
-          dataPreview: data.substring(0, 200),
-          isHTML: data.trim().startsWith('<')
-        });
-        
-        // Check if response is HTML (error page)
-        if (data.trim().startsWith('<')) {
-          const errorPreview = data.substring(0, 500);
-          console.error('HubSpot returned HTML instead of JSON:', errorPreview);
-          reject(new Error(`HubSpot API returned HTML error page. Status: ${res.statusCode}. Check API key permissions and endpoint. Response preview: ${errorPreview.substring(0, 200)}`));
-          return;
-        }
-        
-        try {
-          const result = JSON.parse(data);
-          
-          console.log('=== HUBSPOT FILES API PARSED RESPONSE ===');
-          console.log('Status Code:', res.statusCode);
-          console.log('Response keys:', Object.keys(result));
-          console.log('Full response:', JSON.stringify(result, null, 2));
-          
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            const fileUrl = result.url || result.objects?.[0]?.url || result.data?.url;
-            const fileId = result.id || result.objects?.[0]?.id || result.data?.id;
-            
-            console.log('Extracted fileUrl:', fileUrl);
-            console.log('Extracted fileId:', fileId);
-            
-            if (!fileUrl && !fileId) {
-              console.error('❌ Unexpected response structure - no URL or ID found');
-              console.error('Response structure:', JSON.stringify(result, null, 2));
-              reject(new Error(`HubSpot API returned success but no file URL or ID. Response: ${JSON.stringify(result)}`));
-              return;
-            }
-            
-            if (!fileUrl) {
-              console.error('❌ No file URL in response, only fileId:', fileId);
-              reject(new Error(`HubSpot API returned file ID but no URL. File ID: ${fileId}`));
-              return;
-            }
-            
-            // Associate with order if orderId provided
-            if (orderId && fileId) {
-              associateFileWithOrder(fileId, orderId).catch(err => {
-                console.warn('Failed to associate file with order:', err.message);
-              });
-            }
-            
-            // Associate with deal if dealId provided
-            if (dealId && fileId) {
-              associateFileWithDeal(fileId, dealId).catch(err => {
-                console.warn('Failed to associate file with deal:', err.message);
-              });
-            }
-            
-            // Ensure URL is a valid HTTP/HTTPS URL
-            let validUrl = fileUrl;
-            if (fileUrl && !fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
-              // HubSpot Files API URLs should already be https://, but ensure it's valid
-              validUrl = fileUrl.startsWith('//') ? `https:${fileUrl}` : `https://${fileUrl}`;
-              console.log('Normalized PDF URL:', { original: fileUrl, normalized: validUrl });
-            }
-            
-            console.log('✅ PDF upload successful, returning URL:', validUrl);
-            resolve({
-              url: validUrl,
-              fileId: fileId,
-              success: true
-            });
-          } else {
-            const errorMsg = result.message || result.error || result.errors?.[0]?.message || `HTTP ${res.statusCode}`;
-            console.error('❌ HubSpot API error response:', {
-              statusCode: res.statusCode,
-              error: errorMsg,
-              fullResponse: result
-            });
-            reject(new Error(`HubSpot API error (${res.statusCode}): ${errorMsg}`));
-          }
-        } catch (parseError) {
-          console.error('Failed to parse response:', {
-            error: parseError.message,
-            statusCode: res.statusCode,
-            responsePreview: data.substring(0, 500)
-          });
-          reject(new Error(`Failed to parse HubSpot response: ${parseError.message}. Response was: ${data.substring(0, 200)}`));
-        }
+      // Provide more helpful error messages based on status code
+      let helpfulMessage = errorMsg;
+      if (statusCode === 401) {
+        helpfulMessage = 'Unauthorized - Check API key and ensure it has Files API permissions (files.ui_hidden.read_write scope)';
+      } else if (statusCode === 403) {
+        helpfulMessage = 'Forbidden - API key lacks required permissions for Files API';
+      } else if (statusCode === 413) {
+        helpfulMessage = 'Payload too large - File size exceeds HubSpot limit';
+      } else if (statusCode === 400) {
+        helpfulMessage = `Bad Request - ${errorMsg}. Check payload format matches HubSpot Files API specification.`;
+      }
+      
+      throw new Error(`HubSpot API error (${statusCode}): ${helpfulMessage}`);
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('❌ No response received from HubSpot API:', {
+        message: error.message,
+        code: error.code
       });
-    });
-    
-    req.on('error', (err) => {
-      reject(new Error(`Request failed: ${err.message}`));
-    });
-    
-    req.write(payload);
-    req.end();
-  });
+      throw new Error(`Request failed: ${error.message}. No response received from HubSpot API.`);
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('❌ Error setting up request:', {
+        message: error.message,
+        stack: error.stack
+      });
+      throw error;
+    }
+  }
 }
 
 /**
