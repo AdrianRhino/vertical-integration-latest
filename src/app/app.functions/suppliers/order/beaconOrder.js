@@ -65,6 +65,95 @@ function buildHardcodedTestPayload(orderBody) {
 }
 
 /**
+ * Extract and validate address from multiple sources
+ * Priority: formatted.deliveryAddress → normalized.delivery.address → orderBody.delivery
+ * Ensures address1 is never empty (required by Beacon API)
+ */
+function extractAndValidateAddress(formatted, normalized, orderBody) {
+    // Try formatted.deliveryAddress first (from formatOrder mapping)
+    let address1 = formatted.deliveryAddress?.line1 || 
+                   formatted.shipping?.address?.address1 || "";
+    
+    let address2 = formatted.deliveryAddress?.line2 || 
+                   formatted.shipping?.address?.address2 || "";
+    
+    let city = formatted.deliveryAddress?.city || 
+               formatted.shipping?.address?.city || "";
+    
+    let state = formatted.deliveryAddress?.state || 
+                formatted.shipping?.address?.state || "";
+    
+    let postalCode = formatted.deliveryAddress?.postalCode || 
+                     formatted.shipping?.address?.postalCode || "";
+    
+    // Fallback to normalized delivery address if formatted doesn't have it
+    if (!address1) {
+        address1 = normalized?.delivery?.address?.line1 || "";
+    }
+    if (!address2) {
+        address2 = normalized?.delivery?.address?.line2 || "";
+    }
+    if (!city) {
+        city = normalized?.delivery?.address?.city || "";
+    }
+    if (!state) {
+        state = normalized?.delivery?.address?.state || "";
+    }
+    if (!postalCode) {
+        postalCode = normalized?.delivery?.address?.postalCode || "";
+    }
+    
+    // Final fallback to orderBody delivery (deal properties)
+    if (!address1) {
+        address1 = orderBody?.delivery?.address_line_1 || 
+                   orderBody?.delivery?.address?.line1 || 
+                   orderBody?.addressSnapshot?.address_line_1 || "";
+    }
+    if (!address2) {
+        address2 = orderBody?.delivery?.address_line_2 || 
+                   orderBody?.delivery?.address?.line2 || "";
+    }
+    if (!city) {
+        city = orderBody?.delivery?.city || 
+              orderBody?.addressSnapshot?.city || "";
+    }
+    if (!state) {
+        state = orderBody?.delivery?.state || 
+                orderBody?.addressSnapshot?.state || "";
+    }
+    if (!postalCode) {
+        postalCode = orderBody?.delivery?.zip_code || 
+                     orderBody?.delivery?.address?.postalCode || 
+                     orderBody?.addressSnapshot?.zip_code || "";
+    }
+    
+    // Validate address1 is not empty (Beacon requirement)
+    // If still empty, log warning and use placeholder (order will likely fail but won't crash)
+    if (!address1 || address1.trim() === "") {
+        console.warn("⚠️ Beacon address1 is empty - order may be rejected by Beacon API");
+        console.warn("Address sources checked:", {
+            formattedDeliveryAddress: formatted.deliveryAddress?.line1,
+            formattedShippingAddress: formatted.shipping?.address?.address1,
+            normalizedDelivery: normalized?.delivery?.address?.line1,
+            orderBodyDelivery: orderBody?.delivery?.address_line_1,
+            orderBodyAddressSnapshot: orderBody?.addressSnapshot?.address_line_1
+        });
+        // Don't set empty string - let Beacon reject with clear error message
+        // This helps identify missing address data
+    }
+    
+    return {
+        address1: address1.trim(),
+        address2: address2.trim(),
+        address3: null, // Beacon uses null for address3
+        city: city.trim(),
+        postalCode: postalCode.trim(),
+        state: state.trim(),
+        country: "USA" // Default to USA
+    };
+}
+
+/**
  * Build payload dynamically based on environment and parameters
  * Maintains EXACT same structure as hardcoded version
  */
@@ -95,34 +184,29 @@ function buildPayload(context, credentials, orderBody) {
     
     const formatted = formatOrder(normalized, "BEACON", credentials.environment);
     
+    // Extract and validate address from multiple sources
+    const address = extractAndValidateAddress(formatted, normalized, orderBody);
+    
     // formatOrder returns object for BEACON (not array like ABC)
     // Map formatted output to EXACT same structure as hardcoded version
     const payload = {
-        accountId: formatted.accountId || "557799",
+        accountId: formatted.accountId || normalized.accountNumber || "557799",
         apiSiteId: formatted.apiSiteId || (credentials.apiSiteId && credentials.apiSiteId.trim() !== "" ? credentials.apiSiteId : "UAT"),
         job: {
             checked: formatted.job?.checked || false,
-            jobName: formatted.job?.jobName || `DEAL-001-TEST`,
-            jobNumber: formatted.job?.jobNumber || "999"
+            jobName: formatted.job?.jobName || normalized.jobName || `DEAL-001-TEST`,
+            jobNumber: formatted.job?.jobNumber || normalized.jobNumber || "999"
         },
-        purchaseOrderNo: formatted.purchaseOrderNo || `PO-${Date.now()}`,
+        purchaseOrderNo: formatted.purchaseOrderNo || normalized.poNumber || `PO-${Date.now()}`,
         lineItems: formatted.lineItems || [],
         shipping: {
             shippingMethod: formatted.shipping?.shippingMethod || "D",
-            shippingBranch: formatted.shipping?.shippingBranch || "300",
-            address: {
-                address1: formatted.shipping?.address?.address1 || "",
-                address2: formatted.shipping?.address?.address2 || "",
-                address3: formatted.shipping?.address?.address3 || null,
-                city: formatted.shipping?.address?.city || "",
-                postalCode: formatted.shipping?.address?.postalCode || "",
-                state: formatted.shipping?.address?.state || "",
-                country: formatted.shipping?.address?.country || "USA"
-            }
+            shippingBranch: formatted.shipping?.shippingBranch || normalized.branchId || "300",
+            address: address
         },
-        specialInstruction: formatted.specialInstruction || "",
-        pickupDate: formatted.pickupDate || "",
-        pickupTime: formatted.pickupTime || "Anytime"
+        specialInstruction: formatted.specialInstruction || normalized.delivery?.notes || "",
+        pickupDate: formatted.pickupDate || normalized.delivery?.date || "",
+        pickupTime: formatted.pickupTime || normalized.delivery?.timeCode || "Anytime"
     };
     
     // Only include apiSiteId if it's configured and not empty
