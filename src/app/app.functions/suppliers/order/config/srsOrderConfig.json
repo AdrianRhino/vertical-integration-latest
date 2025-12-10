@@ -72,7 +72,8 @@
   },
   "specialHandlers": {
     "transactionID": "generateUUID",
-    "transactionDate": "generateTimestamp"
+    "transactionDate": "generateTimestamp",
+    "poDetails.orderDate": "generateDateYYYYMMDD"
   }
 }
 

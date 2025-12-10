@@ -90,6 +90,10 @@ function applyEnumMapping(fieldPath, value, config) {
  * Apply special handlers (UUID generation, timestamps, etc.)
  */
 function applySpecialHandler(handlerName, fieldPath, normalizedOrder) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:92',message:'SPECIAL_HANDLER_CALLED',data:{handlerName,fieldPath},timestamp:Date.now(),sessionId:'debug-session',runId:'run7',hypothesisId:'M'})}).catch(()=>{});
+  // #endregion
+  
   switch (handlerName) {
     case 'generateUUID':
       return generateUUID();
@@ -97,6 +101,13 @@ function applySpecialHandler(handlerName, fieldPath, normalizedOrder) {
       return new Date().toISOString();
     case 'generateRequestId':
       return normalizedOrder.requestId || `req-${Date.now()}`;
+    case 'generateDateYYYYMMDD':
+      // Generate current date in YYYY-MM-DD format (used for orderDate)
+      const dateValue = new Date().toISOString().split('T')[0];
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:103',message:'DATE_GENERATED',data:{handlerName,fieldPath,dateValue},timestamp:Date.now(),sessionId:'debug-session',runId:'run7',hypothesisId:'M'})}).catch(()=>{});
+      // #endregion
+      return dateValue;
     default:
       return null;
   }
@@ -163,8 +174,14 @@ function formatOrder(orderBody, supplier, environment = 'sandbox') {
       // Check if this is a special handler
       const specialHandlers = config.specialHandlers || {};
       if (specialHandlers[defaultPath]) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:167',message:'DEFAULT_WITH_HANDLER',data:{defaultPath,defaultValue,hasExistingValue:existingValue!==undefined,existingValue,handlerName:specialHandlers[defaultPath]},timestamp:Date.now(),sessionId:'debug-session',runId:'run7',hypothesisId:'M'})}).catch(()=>{});
+        // #endregion
         const specialValue = applySpecialHandler(specialHandlers[defaultPath], defaultPath, normalizedOrder);
         if (specialValue !== null) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:172',message:'HANDLER_VALUE_SET',data:{defaultPath,specialValue},timestamp:Date.now(),sessionId:'debug-session',runId:'run7',hypothesisId:'M'})}).catch(()=>{});
+          // #endregion
           setNestedValue(payload, defaultPath, specialValue);
         } else {
           setNestedValue(payload, defaultPath, defaultValue);
@@ -419,6 +436,50 @@ function formatOrder(orderBody, supplier, environment = 'sandbox') {
     // Ensure poDetails structure
     if (!payload.poDetails) {
       payload.poDetails = {};
+    }
+    // Ensure poDetails.orderDate is set - SRS requires a non-empty value
+    // CRITICAL: This must ALWAYS be set to a valid date, never empty
+    const currentOrderDate = payload.poDetails.orderDate;
+    const isEmpty = !currentOrderDate || 
+                    (typeof currentOrderDate === 'string' && currentOrderDate.trim() === "") ||
+                    currentOrderDate === null ||
+                    currentOrderDate === undefined;
+    
+    if (isEmpty) {
+      const today = new Date();
+      const defaultDate = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+      payload.poDetails.orderDate = defaultDate;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:450',message:'ORDERDATE_FORCED_SET',data:{wasEmpty:true,previousValue:currentOrderDate||'null',newValue:defaultDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run8',hypothesisId:'N'})}).catch(()=>{});
+      // #endregion
+    } else {
+      // Verify it's a valid date format (should be YYYY-MM-DD, at least 8 chars)
+      const trimmedDate = String(currentOrderDate).trim();
+      if (trimmedDate.length < 8) {
+        const today = new Date();
+        const defaultDate = today.toISOString().split('T')[0];
+        payload.poDetails.orderDate = defaultDate;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:462',message:'ORDERDATE_INVALID_REPLACED',data:{previousValue:trimmedDate,newValue:defaultDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run8',hypothesisId:'N'})}).catch(()=>{});
+        // #endregion
+      } else {
+        payload.poDetails.orderDate = trimmedDate;
+      }
+    }
+  }
+  
+  // FINAL VALIDATION: Ensure orderDate is never empty for SRS before returning
+  if (supplierUpper === 'SRS' && payload.poDetails) {
+    const finalOrderDate = payload.poDetails.orderDate;
+    if (!finalOrderDate || 
+        (typeof finalOrderDate === 'string' && finalOrderDate.trim() === "") ||
+        finalOrderDate === null ||
+        finalOrderDate === undefined) {
+      const today = new Date();
+      payload.poDetails.orderDate = today.toISOString().split('T')[0];
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:472',message:'ORDERDATE_FINAL_CHECK_SET',data:{wasEmpty:true,setTo:payload.poDetails.orderDate},timestamp:Date.now(),sessionId:'debug-session',runId:'run8',hypothesisId:'N'})}).catch(()=>{});
+      // #endregion
     }
   }
   
