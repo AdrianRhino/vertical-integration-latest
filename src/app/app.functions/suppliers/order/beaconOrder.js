@@ -16,6 +16,7 @@ const { wrapper } = require('axios-cookiejar-support');
 const { formatOrder } = require("./formatOrder");
 const { normalizeInput } = require("./normalizeInput");
 const { getCredentials } = require("../config/getCredentials");
+const { logOrder } = require("./logOrder");
 
 /**
  * Build hardcoded test payload for Beacon sandbox testing
@@ -71,16 +72,17 @@ function buildPayload(context, credentials, orderBody) {
     const { useTestPayload } = context.parameters || {};
     const isSandbox = credentials.environment === "sandbox";
     
-    // Sandbox: Default to hardcoded test unless useTestPayload is explicitly false
-    // Production: Always use orderBody
-    if (isSandbox && useTestPayload !== false) {
+    // Flag-based test payload: Only use hardcoded test if explicitly enabled
+    // Default: false (use real order data) for both sandbox and production
+    // Set useTestPayload=true to use hardcoded test payload
+    if (useTestPayload === true) {
         return buildHardcodedTestPayload(orderBody);
     }
     
-    // Production or sandbox with useTestPayload=false → use orderBody
+    // Production or sandbox with useTestPayload=false/undefined → use orderBody
     if (!orderBody) {
         const errorMsg = isSandbox 
-            ? "orderBody is required when useTestPayload is false in sandbox"
+            ? "orderBody is required. Set useTestPayload=true to use test payload in sandbox"
             : "orderBody is required for production orders";
         throw new Error(errorMsg);
     }
@@ -360,15 +362,10 @@ exports.main = async (context = {}) => {
         // Build payload dynamically based on environment and flags
         const payload = buildPayload(context, credentials, orderBody);
         
-        // Log payload for sandbox verification
-        if (credentials.environment === "sandbox") {
-            console.log("=== BEACON SANDBOX ORDER PAYLOAD ===");
-            console.log(JSON.stringify(payload, null, 2));
-            console.log("=== END BEACON SANDBOX ORDER PAYLOAD ===");
-        }
-
+        // Log order payload before sending to supplier API
+        logOrder(payload, "BEACON", "before sending to Beacon API");
+        
         console.log("Submitting order to:", orderUrl);
-        console.log("Order payload:", JSON.stringify(payload, null, 2));
         
         let orderResponse;
         

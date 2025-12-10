@@ -328,6 +328,39 @@ function formatOrder(orderBody, supplier, environment = 'sandbox') {
         } else {
           payload.shipTo.contacts = [];
         }
+      } else {
+        // contacts is already an array - validate and fix each contact
+        payload.shipTo.contacts = payload.shipTo.contacts
+          .filter(contact => contact && contact.email) // ABC only accepts contacts with email
+          .map(contact => {
+            // Ensure required contact fields exist
+            const fixedContact = {
+              name: contact.name || '',
+              functionCode: contact.functionCode || 'SM',
+              email: contact.email || '',
+              phones: []
+            };
+            
+            // Validate and fix phones array
+            if (Array.isArray(contact.phones) && contact.phones.length > 0) {
+              fixedContact.phones = contact.phones
+                .filter(phone => phone && phone.number) // Only include phones with number
+                .map(phone => ({
+                  number: String(phone.number).replace(/\D+/g, ''),
+                  type: phone.type || 'MOBILE',
+                  ext: phone.ext !== undefined ? String(phone.ext) : ''
+                }));
+            } else if (contact.phone) {
+              // Handle single phone (not in array)
+              fixedContact.phones = [{
+                number: String(contact.phone).replace(/\D+/g, ''),
+                type: 'MOBILE',
+                ext: ''
+              }];
+            }
+            
+            return fixedContact;
+          });
       }
     }
     

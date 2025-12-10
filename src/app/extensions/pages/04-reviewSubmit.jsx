@@ -228,6 +228,7 @@ const ReviewSubmit = ({
     const response = await hubspot.serverless("sendOrderToSupplier", {
       parameters: {
         fullOrder: orderPayload,
+        parsedOrder: parsedOrder || null, // Pass parsedOrder for unified order preparation
         dealId: context.crm.objectId, // Pass dealId for PDF association
       },
     });
@@ -469,16 +470,67 @@ const ReviewSubmit = ({
           <ButtonRow>
             <Button variant="primary" onClick={async () => {
               try {
+                // Get current timestamp
+                const submitTime = new Date();
+                const formattedTime = submitTime.toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: true
+                });
+                
+                console.log(`🕐 Order submission started at: ${formattedTime}`);
+                sendAlert({ 
+                  message: `Submitting order at ${formattedTime}...`, 
+                  type: "info" 
+                });
+                
                 // Step 1: Create/update order in HubSpot and get orderId
                 const orderId = await sendOrderToHubspot();
                 
                 // Step 2: Send order to supplier (generates PDF) and save PDF URL
                 await sendOrderToSupplier(orderId);
                 
+                // Show completion time
+                const completionTime = new Date();
+                const formattedCompletionTime = completionTime.toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: true
+                });
+                
+                const duration = ((completionTime - submitTime) / 1000).toFixed(2);
+                
+                console.log(`✅ Order submission completed at: ${formattedCompletionTime} (Duration: ${duration}s)`);
+                sendAlert({ 
+                  message: `Order submitted successfully at ${formattedCompletionTime}`, 
+                  type: "success" 
+                });
+                
                 setOrderPage(5);
               } catch (error) {
-                console.error("Error submitting order:", error);
-                sendAlert({ message: "Error submitting order. Please try again.", type: "error" });
+                const errorTime = new Date().toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: true
+                });
+                
+                console.error(`❌ Error submitting order at ${errorTime}:`, error);
+                sendAlert({ 
+                  message: `Error submitting order at ${errorTime}. Please try again.`, 
+                  type: "error" 
+                });
               }
               }}>
               Submit Order

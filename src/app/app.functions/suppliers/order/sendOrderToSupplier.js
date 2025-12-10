@@ -17,6 +17,10 @@ const ORDER_FUNCTIONS = {
   // Add new suppliers here as they're added
 };
 
+// Order preparation and logging modules
+const { prepareOrder } = require('./prepareOrder');
+const { logOrder } = require('./logOrder');
+
 // PDF generation and upload modules (optional - gracefully handle if not available)
 let generateOrderPDF, uploadPDFToHubspot;
 try {
@@ -53,45 +57,51 @@ function getOrderFunction(supplier) {
 
 exports.main = async (context = {}) => {
   try {
-    const { fullOrder, environment, dealId } = context.parameters || {};
+    const { fullOrder, parsedOrder, environment, dealId } = context.parameters || {};
     
     // Filter: Validate fullOrder exists
     if (!fullOrder) {
       return {
-        success: false,
-        message: 'Missing fullOrder parameter',
-        error: 'fullOrder is required to place an order'
+        statusCode: 400,
+        body: {
+          success: false,
+          message: 'Missing fullOrder parameter',
+          error: 'fullOrder is required to place an order'
+        }
       };
     }
     
+    // Transform: Prepare unified order from fullOrder and parsedOrder
+    const unifiedOrder = prepareOrder(fullOrder, parsedOrder || {}, environment);
+    
     // Filter: Validate supplier exists
-    const supplier = fullOrder.supplier;
+    const supplier = unifiedOrder.supplier;
     if (!supplier) {
       return {
-        success: false,
-        message: 'Missing supplier in fullOrder',
-        error: 'fullOrder.supplier is required to route to correct supplier'
+        statusCode: 400,
+        body: {
+          success: false,
+          message: 'Missing supplier in order',
+          error: 'Order supplier is required to route to correct supplier'
+        }
       };
     }
     
     console.log(`Routing order to supplier: ${supplier}`);
-    console.log('Full order structure:', {
-      supplier: fullOrder.supplier,
-      hasItems: !!fullOrder.fullOrderItems,
-      itemsCount: fullOrder.fullOrderItems?.length || 0,
-      hasDelivery: !!fullOrder.delivery,
-      orderStatus: fullOrder.orderStatus
-    });
+    
+    // Log order before routing to supplier
+    logOrder(unifiedOrder, supplier, 'before routing to supplier');
     
     // Transform: Get appropriate order function from registry
     const orderFunction = getOrderFunction(supplier);
     
     // Transform: Prepare context for supplier order function
-    // Pass fullOrder as orderBody and include environment if provided
+    // Pass unified order as orderBody and include environment if provided
     const supplierContext = {
       parameters: {
-        orderBody: fullOrder,
-        environment: environment || null
+        orderBody: unifiedOrder,
+        environment: environment || null,
+        useTestPayload: context.parameters?.useTestPayload // Pass through test payload flag
       }
     };
     
@@ -107,16 +117,16 @@ exports.main = async (context = {}) => {
     // Generate PDF and upload to HubSpot if order submission was successful
     if (result.success && generateOrderPDF) {
       try {
-        const orderNumber = fullOrder.orderId || fullOrder.ticket || `ORD-${Date.now()}`;
+        const orderNumber = unifiedOrder.orderId || unifiedOrder.ticket || `ORD-${Date.now()}`;
         const fileName = `Order-${orderNumber}-${supplier.toUpperCase()}.pdf`;
         
         console.log('Generating order PDF...');
-        const pdfBuffer = await generateOrderPDF(fullOrder, result);
+        const pdfBuffer = await generateOrderPDF(unifiedOrder, result);
         
         // Upload PDF to HubSpot Files API if uploadPDFToHubspot is available
         if (uploadPDFToHubspot) {
           try {
-            const orderId = fullOrder.orderId || fullOrder.selectedOrderId || null;
+            const orderId = unifiedOrder.orderId || unifiedOrder.selectedOrderId || null;
             
             console.log('=== ATTEMPTING PDF UPLOAD TO HUBSPOT ===');
             console.log('Upload parameters:', {

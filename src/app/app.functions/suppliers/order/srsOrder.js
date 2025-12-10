@@ -14,6 +14,7 @@ const qs = require("qs");
 const { getCredentials } = require("../config/getCredentials");
 const { normalizeInput } = require("./normalizeInput");
 const { formatOrder } = require("./formatOrder");
+const { logOrder } = require("./logOrder");
 
 /**
  * Build hardcoded test payload for SRS sandbox testing
@@ -84,16 +85,17 @@ function buildPayload(context, credentials) {
     const { orderBody, useTestPayload } = context.parameters || {};
     const isSandbox = credentials.environment === "sandbox";
     
-    // Sandbox: Default to hardcoded test unless useTestPayload is explicitly false
-    // Production: Always use orderBody
-    if (isSandbox && useTestPayload !== false) {
+    // Flag-based test payload: Only use hardcoded test if explicitly enabled
+    // Default: false (use real order data) for both sandbox and production
+    // Set useTestPayload=true to use hardcoded test payload
+    if (useTestPayload === true) {
         return buildHardcodedTestPayload();
     }
     
-    // Production or sandbox with useTestPayload=false → use orderBody
+    // Production or sandbox with useTestPayload=false/undefined → use orderBody
     if (!orderBody) {
         const errorMsg = isSandbox 
-            ? "orderBody is required when useTestPayload is false in sandbox"
+            ? "orderBody is required. Set useTestPayload=true to use test payload in sandbox"
             : "orderBody is required for production orders";
         throw new Error(errorMsg);
     }
@@ -190,12 +192,8 @@ exports.main = async (context = {}) => {
         // Build payload dynamically based on environment and flags
         const orderData = buildPayload(context, credentials);
         
-        // Log payload for sandbox verification
-        if (credentials.environment === "sandbox") {
-            console.log("=== SRS SANDBOX ORDER PAYLOAD ===");
-            console.log(JSON.stringify(orderData, null, 2));
-            console.log("=== END SRS SANDBOX ORDER PAYLOAD ===");
-        }
+        // Log order payload before sending to supplier API
+        logOrder(orderData, "SRS", "before sending to SRS API");
 
             const orderConfig = {
                 method: "POST",

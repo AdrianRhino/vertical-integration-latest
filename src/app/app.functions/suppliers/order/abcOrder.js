@@ -13,6 +13,7 @@ const axios = require("axios");
 const { getCredentials } = require("../config/getCredentials");
 const { normalizeInput } = require("./normalizeInput");
 const { formatOrder } = require("./formatOrder");
+const { logOrder } = require("./logOrder");
 
 /**
  * Build hardcoded test payload for sandbox testing
@@ -52,7 +53,18 @@ function buildHardcodedTestPayload(productData, accountData) {
           postal: "60661",
           country: "USA",
         },
-        contacts: [],
+        contacts: {
+          name: "John Doe",
+          functionCode: "SM",
+          email: "john.doe@example.com",
+          phones: [
+            {
+              number: "1234567890",
+              type: "MOBILE",
+              ext: "",
+            },
+          ],
+        }
       },
       orderComments: [],
       lines: [
@@ -86,6 +98,48 @@ function calculateDeliveryDate() {
 }
 
 /**
+ * Validate and fix ABC contacts structure
+ * Ensures all required fields exist (name, functionCode, email, and phones with type/ext)
+ * This is a defensive check to catch any cases where formatOrder might have missed validation
+ */
+function validateAndFixContacts(contacts) {
+  if (!Array.isArray(contacts) || contacts.length === 0) {
+    return [];
+  }
+  
+  return contacts
+    .filter(contact => contact && contact.email) // ABC only accepts contacts with email
+    .map(contact => {
+      const fixedContact = {
+        name: contact.name || '',
+        functionCode: contact.functionCode || 'SM',
+        email: contact.email || '',
+        phones: []
+      };
+      
+      // Validate and fix phones array
+      if (Array.isArray(contact.phones) && contact.phones.length > 0) {
+        fixedContact.phones = contact.phones
+          .filter(phone => phone && phone.number)
+          .map(phone => ({
+            number: String(phone.number).replace(/\D+/g, ''),
+            type: phone.type || 'MOBILE',
+            ext: phone.ext !== undefined ? String(phone.ext) : ''
+          }));
+      } else if (contact.phone) {
+        // Handle single phone (not in array)
+        fixedContact.phones = [{
+          number: String(contact.phone).replace(/\D+/g, ''),
+          type: 'MOBILE',
+          ext: ''
+        }];
+      }
+      
+      return fixedContact;
+    });
+}
+
+/**
  * Build payload dynamically based on environment and parameters
  * Maintains EXACT same structure as hardcoded version
  */
@@ -93,16 +147,17 @@ function buildPayload(context, credentials, productData, accountData) {
   const { orderBody, useTestPayload } = context.parameters || {};
   const isSandbox = credentials.environment === "sandbox";
   
-  // Sandbox: Default to hardcoded test unless useTestPayload is explicitly false
-  // Production: Always use orderBody
-  if (isSandbox && useTestPayload !== false) {
+  // Flag-based test payload: Only use hardcoded test if explicitly enabled
+  // Default: false (use real order data) for both sandbox and production
+  // Set useTestPayload=true to use hardcoded test payload
+  if (useTestPayload === true) {
     return buildHardcodedTestPayload(productData, accountData);
   }
   
-  // Production or sandbox with useTestPayload=false → use orderBody
+  // Production or sandbox with useTestPayload=false/undefined → use orderBody
   if (!orderBody) {
     const errorMsg = isSandbox 
-      ? "orderBody is required when useTestPayload is false in sandbox"
+      ? "orderBody is required. Set useTestPayload=true to use test payload in sandbox"
       : "orderBody is required for production orders";
     throw new Error(errorMsg);
   }
@@ -151,7 +206,7 @@ function buildPayload(context, credentials, productData, accountData) {
         postal: formattedOrder.shipTo?.address?.postal || '',
         country: formattedOrder.shipTo?.address?.country || 'USA',
       },
-      contacts: formattedOrder.shipTo?.contacts || [],
+      contacts: validateAndFixContacts(formattedOrder.shipTo?.contacts),
     },
     orderComments: formattedOrder.orderComments || [],
     lines: formattedOrder.lines || [],
@@ -295,14 +350,10 @@ exports.main = async (context = {}) => {
     // Build payload dynamically based on environment and flags
     const payload = buildPayload(context, credentials, productData, accountData);
     
-    // Log payload for sandbox verification
-    if (credentials.environment === "sandbox") {
-        console.log("=== ABC SANDBOX ORDER PAYLOAD ===");
-        console.log(JSON.stringify(payload, null, 2));
-        console.log("=== END ABC SANDBOX ORDER PAYLOAD ===");
-    }
-
-    console.log("Order Payload:", JSON.stringify(payload, null, 2));
+    // Log order payload before sending to supplier API
+    // Extract first order from array for logging (ABC returns array)
+    const orderForLogging = Array.isArray(payload) ? payload[0] : payload;
+    logOrder(orderForLogging, "ABC", "before sending to ABC API");
 
   
 
