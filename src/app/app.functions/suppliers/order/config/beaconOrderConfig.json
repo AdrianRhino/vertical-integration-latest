@@ -47,6 +47,32 @@
       "Morning": "MORNING",
       "Afternoon": "AFTERNOON"
     }
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "initialDelayMs": 1000,
+    "maxDelayMs": 5000,
+    "backoffMultiplier": 2,
+    "retriableErrorPatterns": [
+      "timeout",
+      "network",
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "connection",
+      "temporarily unavailable",
+      "service unavailable"
+    ],
+    "nonRetriableErrorPatterns": [
+      "validation failed",
+      "invalid",
+      "required",
+      "is required",
+      "authentication failed",
+      "unauthorized",
+      "forbidden",
+      "not found",
+      "accountid is required"
+    ]
   }
 }
 

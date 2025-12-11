@@ -258,11 +258,15 @@ const ReviewSubmit = ({
     });
     
     // Check if URL is a valid HubSpot file URL (preferred) or data URL (fallback for text properties)
+    // Accepts both CDN URLs (hubspotusercontent, hubapi.com, cdn2.hubspot) and app URLs (app.hubspot.com/files/)
     const isHubSpotFileUrl = pdfUrl && 
                              typeof pdfUrl === 'string' && 
                              !pdfUrl.startsWith('data:') && 
                              (pdfUrl.startsWith('http://') || pdfUrl.startsWith('https://')) &&
-                             (pdfUrl.includes('hubspotusercontent') || pdfUrl.includes('hubapi.com') || pdfUrl.includes('cdn2.hubspot'));
+                             (pdfUrl.includes('hubspotusercontent') || 
+                              pdfUrl.includes('hubapi.com') || 
+                              pdfUrl.includes('cdn2.hubspot') ||
+                              pdfUrl.includes('app.hubspot.com/files/'));
     
     const isDataUrl = pdfUrl && typeof pdfUrl === 'string' && pdfUrl.startsWith('data:application/pdf;base64,');
     
@@ -270,6 +274,10 @@ const ReviewSubmit = ({
     // If property is URL type, only save HTTP/HTTPS URLs
     // For now, allow both but prefer HubSpot file URLs
     const canSaveUrl = (isHubSpotFileUrl || isDataUrl) && orderIdToUpdate;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'04-reviewSubmit.jsx:272',message:'URL_VALIDATION',data:{hasPdfUrl:!!pdfUrl,pdfUrl:pdfUrl?.substring(0,150),isHubSpotFileUrl,isDataUrl,canSaveUrl,hasOrderId:!!orderIdToUpdate},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     
     // If PDF URL exists (HubSpot file URL or data URL), update the order
     if (canSaveUrl) {
@@ -285,6 +293,10 @@ const ReviewSubmit = ({
           orderId: orderIdToUpdate,
           urlType: isHubSpotFileUrl ? 'HubSpot File URL' : isDataUrl ? 'Data URL' : 'Unknown'
         });
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'04-reviewSubmit.jsx:289',message:'CALLING_SETSUBMITSTATUS',data:{orderId:orderIdToUpdate,hasPdfUrl:!!pdfUrl,pdfUrl:pdfUrl?.substring(0,150)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
         
         const updateResponse = await hubspot.serverless("setSubmitStatus", {
           parameters: {

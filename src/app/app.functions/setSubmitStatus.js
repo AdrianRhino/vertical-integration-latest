@@ -3,8 +3,13 @@ const axios = require("axios"); // Added axios for V4 associations
 exports.main = async (context = {}) => {
     const { status, orderId, pdfUrl } = context.parameters || {};
     
-    // Property name for storing PDF URL in HubSpot order object
-    const pdfPropertyName = 'order_PDF';
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'setSubmitStatus.js:4',message:'FUNCTION_ENTRY',data:{hasStatus:!!status,hasOrderId:!!orderId,hasPdfUrl:!!pdfUrl,pdfUrl:pdfUrl?.substring(0,150),orderId,status,parameterKeys:context.parameters?Object.keys(context.parameters):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3,H4,H5'})}).catch(()=>{});
+    // #endregion
+    
+    // Property name for storing PDF URL in HubSpot order object (Material Order custom object)
+    // Using lowercase to match user's specification: order_pdf
+    const pdfPropertyName = 'order_pdf';
 
     if (!status) {
         return {
@@ -62,9 +67,17 @@ exports.main = async (context = {}) => {
                     new URL(validUrl); // This will throw if URL is invalid
                     properties[pdfPropertyName] = validUrl;
                     console.log(`✅ Adding ${pdfPropertyName} property with valid HTTP/HTTPS URL:`, validUrl);
+                    
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'setSubmitStatus.js:64',message:'PROPERTY_SET',data:{pdfPropertyName,validUrl:validUrl.substring(0,200),propertiesSet:Object.keys(properties)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+                    // #endregion
                 } catch (urlError) {
                     console.error(`❌ Invalid URL format, cannot save to ${pdfPropertyName}:`, validUrl);
                     console.error("URL validation error:", urlError.message);
+                    
+                    // #region agent log
+                    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'setSubmitStatus.js:69',message:'URL_VALIDATION_FAILED',data:{validUrl:validUrl?.substring(0,200),error:urlError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+                    // #endregion
                 }
             }
         } else {
@@ -92,6 +105,10 @@ exports.main = async (context = {}) => {
         console.log("=== HUBSPOT API RESPONSE ===");
         console.log(JSON.stringify(response.data, null, 2));
         console.log("✅ Order status updated successfully");
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'setSubmitStatus.js:95',message:'API_SUCCESS',data:{statusCode:response.status,hasData:!!response.data,propertiesUpdated:properties,responseDataKeys:response.data?Object.keys(response.data):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
         
         return {
             statusCode: 200,

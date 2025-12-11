@@ -61,6 +61,30 @@
   },
   "specialHandlers": {
     "requestId": "generateRequestId"
+  },
+  "retry": {
+    "maxAttempts": 3,
+    "initialDelayMs": 1000,
+    "maxDelayMs": 5000,
+    "backoffMultiplier": 2,
+    "retriableErrorPatterns": [
+      "Unable to retrieve confirmation",
+      "timeout",
+      "network",
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "connection",
+      "temporarily unavailable"
+    ],
+    "nonRetriableErrorPatterns": [
+      "validation failed",
+      "invalid",
+      "required",
+      "authentication failed",
+      "unauthorized",
+      "forbidden",
+      "not found"
+    ]
   }
 }
 

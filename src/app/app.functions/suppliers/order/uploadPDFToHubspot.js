@@ -135,14 +135,22 @@ async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = 
     // Extract file URL and ID from response
     const fileUrl = uploadResponse.data.url;
     const fileId = uploadResponse.data.id;
+    const responseFolderId = uploadResponse.data.folderId || uploadResponse.data.folder?.id;
     
     console.log('Extracted fileUrl:', fileUrl);
     console.log('Extracted fileId:', fileId);
+    console.log('Extracted folderId from response:', responseFolderId);
     
     if (!fileUrl) {
       console.error('❌ No file URL in response');
       console.error('Response structure:', JSON.stringify(uploadResponse.data, null, 2));
       throw new Error(`HubSpot API returned success but no file URL. Response: ${JSON.stringify(uploadResponse.data)}`);
+    }
+    
+    if (!fileId) {
+      console.error('❌ No file ID in response');
+      console.error('Response structure:', JSON.stringify(uploadResponse.data, null, 2));
+      throw new Error(`HubSpot API returned success but no file ID. Response: ${JSON.stringify(uploadResponse.data)}`);
     }
     
     // Associate with order if orderId provided (non-blocking)
@@ -167,11 +175,44 @@ async function uploadPDFToHubspot(pdfBuffer, fileName, orderId = null, dealId = 
     }
     
     console.log('✅ PDF upload successful, returning URL:', validUrl);
-    return {
-      url: validUrl,
+    
+    // Construct HubSpot app URL format: https://app.hubspot.com/files/{portalId}/?folderId={folderId}&showDetails={fileId}
+    // Portal ID can be set in environment variable or extracted from API key format
+    // Default to 21196760 (from hubspot.config.yml) if not set
+    const portalId = process.env.HUBSPOT_PORTAL_ID || '21196760';
+    
+    // Use folderId from response (preferred), then from function parameter, then fallback
+    const finalFolderId = responseFolderId || folderId || '202125547541';
+    
+    // Construct the HubSpot app URL format for the order_pdf property
+    const appUrl = `https://app.hubspot.com/files/${portalId}/?folderId=${finalFolderId}&showDetails=${fileId}`;
+    
+    console.log('📎 Constructed HubSpot app URL for order_pdf:', appUrl);
+    console.log('📎 File details:', { 
+      portalId, 
+      folderId: finalFolderId, 
+      fileId,
+      folderIdSource: responseFolderId ? 'response' : folderId ? 'parameter' : 'fallback'
+    });
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'uploadPDFToHubspot.js:188',message:'APP_URL_CONSTRUCTION',data:{appUrl,portalId,folderId:finalFolderId,fileId,hasValidUrl:!!validUrl,hasFileId:!!fileId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
+    const returnValue = {
+      url: validUrl, // Keep original CDN URL for reference
+      appUrl: appUrl, // HubSpot app URL format for order_pdf property
       fileId: fileId,
+      folderId: finalFolderId,
+      portalId: portalId,
       success: true
     };
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'uploadPDFToHubspot.js:205',message:'RETURN_VALUE',data:{hasUrl:!!returnValue.url,hasAppUrl:!!returnValue.appUrl,appUrl:returnValue.appUrl,url:returnValue.url?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
+    return returnValue;
     
   } catch (error) {
     // Handle axios errors

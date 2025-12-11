@@ -21,6 +21,13 @@ const ORDER_FUNCTIONS = {
 const { prepareOrder } = require('./prepareOrder');
 const { logOrder } = require('./logOrder');
 
+// Retry utility for order submissions
+const { retryOrderSubmission } = require('./retryOrderSubmission');
+
+// File system and path modules for loading configs
+const path = require('path');
+const fs = require('fs');
+
 // PDF generation and upload modules (optional - gracefully handle if not available)
 let generateOrderPDF, uploadPDFToHubspot;
 try {
@@ -32,6 +39,24 @@ try {
   console.warn('PDF modules not available:', error.message);
   generateOrderPDF = null;
   uploadPDFToHubspot = null;
+}
+
+/**
+ * Load supplier config from JSON file
+ * @param {string} supplier - Supplier name
+ * @param {string} environment - Environment ('sandbox', 'production')
+ * @returns {Object|null} Supplier config or null if not found
+ */
+function loadSupplierConfig(supplier, environment = 'sandbox') {
+  const configPath = path.join(__dirname, 'config', `${supplier.toLowerCase()}OrderConfig.json`);
+  
+  try {
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(configContent);
+  } catch (error) {
+    console.error(`Failed to load config for ${supplier}:`, error.message);
+    return null;
+  }
 }
 
 /**
@@ -106,8 +131,26 @@ exports.main = async (context = {}) => {
       }
     };
     
-    // Output: Call supplier-specific order function
-    const result = await orderFunction.main(supplierContext);
+    // Load retry configuration from supplier config
+    const supplierConfig = loadSupplierConfig(supplier, environment || 'sandbox');
+    const retryConfig = supplierConfig?.retry || {
+      maxAttempts: 3,
+      initialDelayMs: 1000,
+      maxDelayMs: 5000,
+      backoffMultiplier: 2,
+      retriableErrorPatterns: [],
+      nonRetriableErrorPatterns: []
+    };
+    
+    console.log(`Retry configuration for ${supplier}:`, {
+      maxAttempts: retryConfig.maxAttempts,
+      initialDelayMs: retryConfig.initialDelayMs,
+      hasRetriablePatterns: (retryConfig.retriableErrorPatterns || []).length > 0,
+      hasNonRetriablePatterns: (retryConfig.nonRetriableErrorPatterns || []).length > 0
+    });
+    
+    // Output: Call supplier-specific order function with retry logic
+    const result = await retryOrderSubmission(orderFunction, supplierContext, retryConfig);
     
     console.log(`Order submission result for ${supplier}:`, {
       success: result.success,
@@ -173,10 +216,22 @@ exports.main = async (context = {}) => {
             console.log('Has URL:', !!uploadResult?.url);
             console.log('URL value:', uploadResult?.url);
             
-            if (uploadResult && uploadResult.url) {
-              result.pdfUrl = uploadResult.url; // Real HubSpot file URL
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sendOrderToSupplier.js:176',message:'UPLOAD_RESULT_CHECK',data:{hasUploadResult:!!uploadResult,hasUrl:!!uploadResult?.url,hasAppUrl:!!uploadResult?.appUrl,urlKeys:uploadResult?Object.keys(uploadResult):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H6'})}).catch(()=>{});
+            // #endregion
+            
+            if (uploadResult && (uploadResult.url || uploadResult.appUrl)) {
+              // Prefer appUrl (HubSpot app format) over CDN URL for order_pdf property
+              result.pdfUrl = uploadResult.appUrl || uploadResult.url; // HubSpot app URL format for order_pdf
               result.pdfFileId = uploadResult.fileId;
-              console.log('✅ PDF uploaded successfully to HubSpot:', uploadResult.url);
+              result.pdfCdnUrl = uploadResult.url; // Keep CDN URL for reference
+              console.log('✅ PDF uploaded successfully to HubSpot');
+              console.log('📎 App URL (for order_pdf):', result.pdfUrl);
+              console.log('📎 CDN URL (reference):', result.pdfCdnUrl);
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sendOrderToSupplier.js:185',message:'PDF_URL_SET',data:{pdfUrl:result.pdfUrl,hasPdfUrl:!!result.pdfUrl,pdfUrlType:typeof result.pdfUrl,appUrl:uploadResult?.appUrl,url:uploadResult?.url?.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H5'})}).catch(()=>{});
+              // #endregion
             } else {
               // Fall back to data URL if upload didn't return URL
               console.error('❌ PDF upload did not return a URL');
@@ -244,6 +299,10 @@ exports.main = async (context = {}) => {
     console.log("PDF URL in result:", result.pdfUrl);
     console.log("Result success:", result.success);
     console.log("Full result:", JSON.stringify(result, null, 2));
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sendOrderToSupplier.js:240',message:'FINAL_RESULT',data:{hasPdfUrl:!!result.pdfUrl,pdfUrl:result.pdfUrl,resultKeys:Object.keys(result),success:result.success},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3,H5'})}).catch(()=>{});
+    // #endregion
     
     // Return in proper serverless function format
     return {
