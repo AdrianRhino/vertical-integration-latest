@@ -28,17 +28,52 @@ async function generateOrderPDF(fullOrder, orderResult = {}) {
     throw new Error('pdfkit module is not installed. Please run: npm install pdfkit');
   }
   
+  // Validate inputs
+  if (!fullOrder || typeof fullOrder !== 'object') {
+    throw new Error(`Invalid fullOrder provided. Expected object, got: ${typeof fullOrder}`);
+  }
+  
+  if (!orderResult || typeof orderResult !== 'object') {
+    orderResult = {};
+  }
+  
+  console.log('generateOrderPDF inputs:', {
+    hasFullOrder: !!fullOrder,
+    fullOrderKeys: Object.keys(fullOrder || {}),
+    hasFullOrderItems: !!fullOrder.fullOrderItems,
+    itemsCount: fullOrder.fullOrderItems?.length || 0,
+    hasDelivery: !!fullOrder.delivery,
+    hasOrderResult: !!orderResult,
+    orderResultKeys: Object.keys(orderResult || {})
+  });
+  
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
       
-      doc.on('data', buffers.push.bind(buffers));
-      doc.on('end', () => {
-        const pdfBuffer = Buffer.concat(buffers);
-        resolve(pdfBuffer);
+      doc.on('data', (chunk) => {
+        buffers.push(chunk);
       });
-      doc.on('error', reject);
+      
+      doc.on('end', () => {
+        try {
+          const pdfBuffer = Buffer.concat(buffers);
+          if (!pdfBuffer || pdfBuffer.length === 0) {
+            reject(new Error('PDF generation completed but buffer is empty'));
+            return;
+          }
+          console.log('PDF buffer created successfully. Size:', pdfBuffer.length, 'bytes');
+          resolve(pdfBuffer);
+        } catch (bufferError) {
+          reject(new Error(`Failed to create PDF buffer: ${bufferError.message}`));
+        }
+      });
+      
+      doc.on('error', (pdfError) => {
+        console.error('PDFDocument error event:', pdfError);
+        reject(new Error(`PDFDocument error: ${pdfError.message || pdfError}`));
+      });
       
       // Header
       doc.fontSize(20).font('Helvetica-Bold')
@@ -160,9 +195,17 @@ async function generateOrderPDF(fullOrder, orderResult = {}) {
         doc.text(`Supplier Confirmation: ${orderResult.confirmationNumber}`, { align: 'center' });
       }
       
-      doc.end();
+      // Finalize the document
+      try {
+        doc.end();
+      } catch (endError) {
+        console.error('Error calling doc.end():', endError);
+        reject(new Error(`Failed to finalize PDF document: ${endError.message || endError}`));
+      }
+      
     } catch (error) {
-      reject(error);
+      console.error('Error in PDF generation try block:', error);
+      reject(error instanceof Error ? error : new Error(String(error)));
     }
   });
 }

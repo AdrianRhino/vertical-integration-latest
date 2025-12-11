@@ -375,21 +375,49 @@ exports.main = async (context = {}) => {
     const requestInfo = orderData.request || {};
     const orders = orderData.orders || [];
     
-    if (requestInfo.ordersFailed > 0) {
-      const failedOrder = orders.find(o => !o.confirmationNumber) || orders[0];
-      console.error("Order failed:", {
+    // Check if any orders failed OR if orders succeeded but no confirmation numbers
+    const hasFailedOrders = requestInfo.ordersFailed > 0;
+    const hasSuccessOrders = requestInfo.ordersSucceeded > 0;
+    const ordersWithConfirmations = orders.filter(o => o.confirmationNumber);
+    const ordersWithoutConfirmations = orders.filter(o => !o.confirmationNumber);
+    
+    if (hasFailedOrders || (hasSuccessOrders && ordersWithConfirmations.length === 0)) {
+      // Find the failed order (one without confirmation, or first order)
+      const failedOrder = ordersWithoutConfirmations[0] || orders[0];
+      
+      console.error("=== ABC ORDER SUBMISSION FAILED ===");
+      console.error("Request info:", {
+        ordersFailed: requestInfo.ordersFailed,
+        ordersSucceeded: requestInfo.ordersSucceeded,
+        totalOrders: orders.length,
+        ordersWithConfirmations: ordersWithConfirmations.length,
+        ordersWithoutConfirmations: ordersWithoutConfirmations.length
+      });
+      console.error("Failed order details:", {
         requestId: failedOrder?.requestId,
         message: failedOrder?.message,
+        errorMessage: failedOrder?.errorMessage,
         errors: failedOrder?.errors,
-        fullResponse: orderData
+        error: failedOrder?.error,
+        confirmationNumber: failedOrder?.confirmationNumber
       });
+      console.error("Full order response:", JSON.stringify(orderData, null, 2));
+      
+      // Extract error message from multiple possible fields
+      const errorMessage = failedOrder?.errorMessage || 
+                          failedOrder?.message || 
+                          failedOrder?.error?.message ||
+                          (failedOrder?.errors && Array.isArray(failedOrder.errors) && failedOrder.errors.length > 0 
+                            ? failedOrder.errors.map(e => e.message || e).join('; ') 
+                            : null) ||
+                          "Order validation failed";
       
       return {
         success: false,
         message: "ABC Order submission failed",
-        error: failedOrder?.message || "Order validation failed",
+        error: errorMessage,
         orderResponse: orderData,
-        requestId: failedOrder?.requestId,
+        requestId: failedOrder?.requestId || requestInfo.requestId,
         accountResponse: accountResponse.data,
         // Common issues to check:
         diagnostic: {
@@ -397,7 +425,10 @@ exports.main = async (context = {}) => {
           shipToNumber: payload[0]?.shipTo?.number,
           itemNumber: payload[0]?.lines?.[0]?.itemNumber,
           deliveryDate: payload[0]?.dates?.deliveryRequestedFor,
-          note: "Check: 1) Ship-to valid for branch, 2) Item available at branch, 3) Date format, 4) Required fields"
+          ordersFailed: requestInfo.ordersFailed,
+          ordersSucceeded: requestInfo.ordersSucceeded,
+          hasConfirmationNumbers: ordersWithConfirmations.length > 0,
+          note: "Check: 1) Ship-to valid for branch, 2) Item available at branch, 3) Date format, 4) Required fields, 5) ABC API response structure"
         }
       };
     }

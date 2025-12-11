@@ -114,14 +114,36 @@ exports.main = async (context = {}) => {
       confirmationNumber: result.confirmationNumber
     });
     
-    // Generate PDF and upload to HubSpot if order submission was successful
-    if (result.success && generateOrderPDF) {
+    // Generate PDF and upload to HubSpot (even if order submission failed, to document the attempt)
+    // This ensures we always have a PDF record of the order attempt
+    if (generateOrderPDF) {
       try {
         const orderNumber = unifiedOrder.orderId || unifiedOrder.ticket || `ORD-${Date.now()}`;
         const fileName = `Order-${orderNumber}-${supplier.toUpperCase()}.pdf`;
         
+        console.log('=== PDF GENERATION START ===');
+        console.log('Order details:', {
+          orderNumber,
+          fileName,
+          supplier,
+          orderSuccess: result.success,
+          orderMessage: result.message,
+          hasItems: !!unifiedOrder.fullOrderItems && unifiedOrder.fullOrderItems.length > 0,
+          itemsCount: unifiedOrder.fullOrderItems?.length || 0,
+          hasDelivery: !!unifiedOrder.delivery,
+          orderId: unifiedOrder.orderId,
+          ticket: unifiedOrder.ticket,
+          confirmationNumber: result.confirmationNumber || 'N/A'
+        });
+        
         console.log('Generating order PDF...');
         const pdfBuffer = await generateOrderPDF(unifiedOrder, result);
+        
+        if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+          throw new Error(`PDF generation returned invalid buffer. Type: ${typeof pdfBuffer}, isBuffer: ${Buffer.isBuffer(pdfBuffer)}`);
+        }
+        
+        console.log('✅ PDF generated successfully. Size:', pdfBuffer.length, 'bytes');
         
         // Upload PDF to HubSpot Files API if uploadPDFToHubspot is available
         if (uploadPDFToHubspot) {
@@ -191,13 +213,26 @@ exports.main = async (context = {}) => {
         
       } catch (pdfError) {
         // Don't fail order submission if PDF generation fails
-        console.error('PDF generation failed (order still submitted):', {
-          message: pdfError.message,
-          stack: pdfError.stack
+        console.error('=== PDF GENERATION FAILED ===');
+        console.error('Error message:', pdfError.message);
+        console.error('Error stack:', pdfError.stack);
+        console.error('Error name:', pdfError.name);
+        console.error('Full error object:', JSON.stringify(pdfError, Object.getOwnPropertyNames(pdfError), 2));
+        console.error('Unified order structure:', {
+          hasFullOrderItems: !!unifiedOrder.fullOrderItems,
+          fullOrderItemsLength: unifiedOrder.fullOrderItems?.length || 0,
+          hasDelivery: !!unifiedOrder.delivery,
+          supplier: unifiedOrder.supplier,
+          orderId: unifiedOrder.orderId,
+          ticket: unifiedOrder.ticket,
+          keys: Object.keys(unifiedOrder)
         });
+        
         result.pdfError = pdfError.message;
+        result.pdfErrorStack = pdfError.stack;
+        result.pdfErrorName = pdfError.name;
       }
-    } else if (result.success && !generateOrderPDF) {
+    } else if (!generateOrderPDF) {
       console.warn('PDF generation skipped: pdfkit module not installed. Run: npm install pdfkit');
       result.pdfWarning = 'PDF generation not available - pdfkit module not installed';
     }
