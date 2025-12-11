@@ -349,7 +349,7 @@ const Extension = ({
                 console.error("Auto pricing failed", error);
                 sendAlert(
                   {
-                    message: "Unable to refresh pricing. Please try again.",
+                    message: "Unable to refresh pricing.  Please try again.",
                     type: "danger",
                   }
                 );
