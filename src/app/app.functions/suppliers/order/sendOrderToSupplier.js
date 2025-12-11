@@ -97,11 +97,12 @@ exports.main = async (context = {}) => {
     
     // Transform: Prepare context for supplier order function
     // Pass unified order as orderBody and include environment if provided
+    // IMPORTANT: useTestPayload is always false for production orders - only test orders should use hardcoded payloads
     const supplierContext = {
       parameters: {
         orderBody: unifiedOrder,
         environment: environment || null,
-        useTestPayload: context.parameters?.useTestPayload // Pass through test payload flag
+        useTestPayload: false // Always use dynamic order data from UI, never hardcoded test payloads
       }
     };
     

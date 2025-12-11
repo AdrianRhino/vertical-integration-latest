@@ -32,6 +32,7 @@
     "delivery.fromTime": "07:00",
     "delivery.toTime": "17:00",
     "delivery.timeCode": "AT",
+    "deliveryAppointment.timeZoneCode": "CT",
     "currency": "USD",
     "typeCode": "SO",
     "deliveryService": "OTG",

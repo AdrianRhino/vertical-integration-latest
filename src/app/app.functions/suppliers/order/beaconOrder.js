@@ -188,29 +188,32 @@ function buildPayload(context, credentials, orderBody) {
     const address = extractAndValidateAddress(formatted, normalized, orderBody);
     
     // formatOrder returns object for BEACON (not array like ABC)
-    // Map formatted output to EXACT same structure as hardcoded version
+    // Use formatted values directly (formatOrder handles defaults from config)
+    // Only use normalized as fallback if formatted doesn't have it and it's not in config defaults
     const payload = {
-        accountId: formatted.accountId || normalized.accountNumber || "557799",
-        apiSiteId: formatted.apiSiteId || (credentials.apiSiteId && credentials.apiSiteId.trim() !== "" ? credentials.apiSiteId : "UAT"),
+        accountId: formatted.accountId || normalized.accountNumber,
+        apiSiteId: formatted.apiSiteId || (credentials.apiSiteId && credentials.apiSiteId.trim() !== "" ? credentials.apiSiteId : undefined),
         job: {
-            checked: formatted.job?.checked || false,
-            jobName: formatted.job?.jobName || normalized.jobName || `DEAL-001-TEST`,
-            jobNumber: formatted.job?.jobNumber || normalized.jobNumber || "999"
+            checked: formatted.job?.checked,
+            jobName: formatted.job?.jobName || normalized.jobName,
+            jobNumber: formatted.job?.jobNumber || normalized.jobNumber
         },
         purchaseOrderNo: formatted.purchaseOrderNo || normalized.poNumber || `PO-${Date.now()}`,
         lineItems: formatted.lineItems || [],
         shipping: {
-            shippingMethod: formatted.shipping?.shippingMethod || "D",
-            shippingBranch: formatted.shipping?.shippingBranch || normalized.branchId || "300",
+            shippingMethod: formatted.shipping?.shippingMethod,
+            shippingBranch: formatted.shipping?.shippingBranch || normalized.branchId,
             address: address
         },
         specialInstruction: formatted.specialInstruction || normalized.delivery?.notes || "",
         pickupDate: formatted.pickupDate || normalized.delivery?.date || "",
-        pickupTime: formatted.pickupTime || normalized.delivery?.timeCode || "Anytime"
+        pickupTime: formatted.pickupTime || normalized.delivery?.timeCode
     };
     
-    // Only include apiSiteId if it's configured and not empty
-    if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
+    // Only include apiSiteId if it's configured and not empty (from credentials or formatted)
+    if (payload.apiSiteId && payload.apiSiteId.trim() !== "") {
+        // Already set above
+    } else if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
         payload.apiSiteId = credentials.apiSiteId;
     }
     

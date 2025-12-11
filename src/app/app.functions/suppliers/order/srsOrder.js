@@ -160,14 +160,16 @@ function buildPayload(context, credentials) {
     
     console.log("✅ Final orderDate value:", orderDateValue);
     
+    // Build payload using formatted values directly (formatOrder already applied config defaults)
+    // Keep critical safety check for orderDate (required field)
     return {
-        sourceSystem: formatted.sourceSystem || "RHINO",
+        sourceSystem: formatted.sourceSystem,
         customerCode: formatted.customerCode || "",
-        jobAccountNumber: formatted.jobAccountNumber || 1,
+        jobAccountNumber: formatted.jobAccountNumber,
         branchCode: formatted.branchCode || "",
         accountNumber: formatted.accountNumber || "",
-        transactionID: formatted.transactionID || `txn-${Date.now()}`,
-        transactionDate: formatted.transactionDate || new Date().toISOString(),
+        transactionID: formatted.transactionID,
+        transactionDate: formatted.transactionDate,
         notes: formatted.notes || "",
         shipTo: {
             name: formatted.shipTo?.name || "",
@@ -184,7 +186,7 @@ function buildPayload(context, credentials) {
             jobNumber: formatted.poDetails?.jobNumber || "",
             // SRS requires orderDate - ALWAYS set to current date if not provided or empty (format: YYYY-MM-DD)
             // This is a critical required field - never submit empty
-            // CRITICAL: Force set to today's date if somehow still empty
+            // CRITICAL: Force set to today's date if somehow still empty (safety check)
             orderDate: (() => {
                 // Final safety check - ensure we never return empty
                 if (!orderDateValue || orderDateValue.trim() === "") {
@@ -196,9 +198,9 @@ function buildPayload(context, credentials) {
                 return orderDateValue;
             })(),
             expectedDeliveryDate: formatted.poDetails?.expectedDeliveryDate || "",
-            expectedDeliveryTime: formatted.poDetails?.expectedDeliveryTime || "Anytime",
-            orderType: formatted.poDetails?.orderType || "WHSE",
-            shippingMethod: formatted.poDetails?.shippingMethod || "Ground Drop"
+            expectedDeliveryTime: formatted.poDetails?.expectedDeliveryTime,
+            orderType: formatted.poDetails?.orderType,
+            shippingMethod: formatted.poDetails?.shippingMethod
         },
         orderLineItemDetails: formatted.orderLineItemDetails || [],
         customerContactInfo: {

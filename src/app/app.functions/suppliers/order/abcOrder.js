@@ -173,30 +173,31 @@ function buildPayload(context, credentials, productData, accountData) {
   // Extract from array (formatOrder returns array for ABC)
   const formattedOrder = Array.isArray(formatted) ? formatted[0] : formatted;
   
-  // Extract account data for fallbacks
+  // Build payload using formatted order data (formatOrder already applied config defaults)
+  // Only use accountData as last resort for required fields not in config defaults
   const { shipToNumber, branchNumber, validShipTos, formattedDate } = accountData;
   
-  // Build payload with EXACT same structure as hardcoded version
+  // Build payload - use formatted values directly (formatOrder handles defaults from config)
   return [{
-    requestId: formattedOrder.requestId || `req-${Date.now()}`,
-    purchaseOrder: formattedOrder.purchaseOrder || 'N/A',
-    branchNumber: formattedOrder.branchNumber || branchNumber,
-    deliveryService: formattedOrder.deliveryService || 'OTG',
-    typeCode: formattedOrder.typeCode || 'SO',
+    requestId: formattedOrder.requestId,
+    purchaseOrder: formattedOrder.purchaseOrder,
+    branchNumber: formattedOrder.branchNumber || branchNumber, // Keep accountData fallback for branchNumber (not in order data)
+    deliveryService: formattedOrder.deliveryService,
+    typeCode: formattedOrder.typeCode,
     dates: {
       deliveryRequestedFor: formattedOrder.dates?.deliveryRequestedFor || formattedDate || calculateDeliveryDate()
     },
     deliveryAppointment: {
-      instructionsTypeCode: formattedOrder.deliveryAppointment?.instructionsTypeCode || 'AT',
+      instructionsTypeCode: formattedOrder.deliveryAppointment?.instructionsTypeCode,
       instructions: formattedOrder.deliveryAppointment?.instructions || '',
-      fromTime: formattedOrder.deliveryAppointment?.fromTime || '10:00',
-      toTime: formattedOrder.deliveryAppointment?.toTime || '11:00',
-      timeZoneCode: formattedOrder.deliveryAppointment?.timeZoneCode || 'CT',
+      fromTime: formattedOrder.deliveryAppointment?.fromTime,
+      toTime: formattedOrder.deliveryAppointment?.toTime,
+      timeZoneCode: formattedOrder.deliveryAppointment?.timeZoneCode,
     },
-    currency: formattedOrder.currency || 'USD',
+    currency: formattedOrder.currency,
     shipTo: {
       name: formattedOrder.shipTo?.name || (validShipTos.length > 0 ? validShipTos[0].name : ''),
-      number: formattedOrder.shipTo?.number || shipToNumber,
+      number: formattedOrder.shipTo?.number || shipToNumber, // Keep accountData fallback (API lookup result)
       address: {
         line1: formattedOrder.shipTo?.address?.line1 || '',
         line2: formattedOrder.shipTo?.address?.line2 || '',
@@ -204,7 +205,7 @@ function buildPayload(context, credentials, productData, accountData) {
         city: formattedOrder.shipTo?.address?.city || '',
         state: formattedOrder.shipTo?.address?.state || '',
         postal: formattedOrder.shipTo?.address?.postal || '',
-        country: formattedOrder.shipTo?.address?.country || 'USA',
+        country: formattedOrder.shipTo?.address?.country, // Let config default handle this
       },
       contacts: validateAndFixContacts(formattedOrder.shipTo?.contacts),
     },
