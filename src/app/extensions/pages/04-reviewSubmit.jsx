@@ -225,23 +225,48 @@ const ReviewSubmit = ({
       orderPayload.selectedOrderId = orderIdForPDF;
     }
     
-    const response = await hubspot.serverless("sendOrderToSupplier", {
+    // Step 1: Submit order to supplier (fast, critical operation)
+    console.log("=== STEP 1: SUBMITTING ORDER TO SUPPLIER ===");
+    const orderResponse = await hubspot.serverless("sendOrderToSupplier", {
       parameters: {
         fullOrder: orderPayload,
-        parsedOrder: parsedOrder || null, // Pass parsedOrder for unified order preparation
-        dealId: context.crm.objectId, // Pass dealId for PDF association
+        parsedOrder: parsedOrder || null,
+        dealId: context.crm.objectId,
       },
     });
     
     console.log("=== sendOrderToSupplier FULL RESPONSE ===");
-    console.log(JSON.stringify(response, null, 2));
-    
-    // Extract PDF URL from response - check multiple possible locations
-    const pdfUrl = response.body?.pdfUrl || 
-                   response.body?.body?.pdfUrl || 
-                   response?.pdfUrl;
+    console.log(JSON.stringify(orderResponse, null, 2));
     
     const orderIdToUpdate = orderIdForPDF || fullOrder.selectedOrderId || orderId;
+    
+    // Step 2: Generate and upload PDF (separate function to avoid timeout)
+    console.log("=== STEP 2: GENERATING AND UPLOADING PDF ===");
+    let pdfUrl = null;
+    try {
+      const pdfResponse = await hubspot.serverless("generateAndUploadOrderPDF", {
+        parameters: {
+          fullOrder: orderPayload,
+          parsedOrder: parsedOrder || null,
+          orderResult: orderResponse.body || {},
+          orderId: orderIdToUpdate,
+          dealId: context.crm.objectId,
+        },
+      });
+      
+      console.log("=== generateAndUploadOrderPDF FULL RESPONSE ===");
+      console.log(JSON.stringify(pdfResponse, null, 2));
+      
+      if (pdfResponse.body?.success && pdfResponse.body?.pdfUrl) {
+        pdfUrl = pdfResponse.body.pdfUrl;
+        console.log("✅ PDF generated and uploaded successfully");
+      } else {
+        console.warn("⚠️ PDF generation/upload returned:", pdfResponse.body);
+      }
+    } catch (pdfError) {
+      console.error("❌ PDF generation/upload failed:", pdfError);
+      // Don't fail the entire order submission if PDF fails
+    }
     
     console.log("=== PDF URL EXTRACTION DEBUG ===");
     console.log({
@@ -320,26 +345,39 @@ const ReviewSubmit = ({
         console.error("Full error:", JSON.stringify(error, null, 2));
       }
     } else {
+      // No PDF URL available - still update order status
       if (!pdfUrl) {
-        console.warn("⚠️ No PDF URL found in response");
+        console.warn("⚠️ No PDF URL available - updating order status without PDF");
       } else if (!isHubSpotFileUrl && !isDataUrl) {
         console.warn("⚠️ PDF URL format not recognized:", pdfUrl?.substring(0, 100));
       }
-      if (!orderIdToUpdate) {
+      
+      // Still update order status even without PDF
+      if (orderIdToUpdate) {
+        try {
+          await hubspot.serverless("setSubmitStatus", {
+            parameters: {
+              status: "Submitted",
+              orderId: orderIdToUpdate,
+              ...(pdfUrl ? { pdfUrl: pdfUrl } : {}),
+            },
+          });
+          console.log("✅ Order status updated successfully" + (pdfUrl ? " with PDF" : " without PDF"));
+        } catch (error) {
+          console.error("❌ Failed to update order status:", error);
+        }
+      } else {
         console.warn("⚠️ No orderId available to update");
       }
-      console.warn("⚠️ Cannot save PDF URL - missing data:", {
-        hasPdfUrl: !!pdfUrl,
-        isHubSpotFileUrl: isHubSpotFileUrl,
-        isDataUrl: isDataUrl,
-        hasOrderId: !!orderIdToUpdate,
-        pdfUrl: pdfUrl ? pdfUrl.substring(0, 100) + '...' : null,
-        orderId: orderIdToUpdate,
-        responseBody: response.body
-      });
     }
     
-    return response;
+    return {
+      ...orderResponse,
+      body: {
+        ...orderResponse.body,
+        pdfUrl: pdfUrl || null,
+      }
+    };
   };
     
 

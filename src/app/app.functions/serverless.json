@@ -79,6 +79,10 @@
   "testPDFUpload": {
     "file": "testPDFUpload.js",
     "secrets": ["HUBSPOT_API_KEY"]
+  },
+  "generateAndUploadOrderPDF": {
+    "file": "suppliers/order/generateAndUploadOrderPDF.js",
+    "secrets": ["HUBSPOT_API_KEY"]
   }
 } 
 }

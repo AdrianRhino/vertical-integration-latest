@@ -5,6 +5,7 @@ import {
   ButtonRow,
   Tag,
   Divider,
+  Flex,
   hubspot,
 } from "@hubspot/ui-extensions";
 
@@ -276,6 +277,60 @@ const Extension = ({
     });
   };
 
+  // SHAPE: Input → Filter → Transform → Store → Output → Loop
+  // INPUT: { fullOrder, context }
+  // FILTER: ensure dealId exists
+  // TRANSFORM: build order payload from current state
+  // STORE: save to HubSpot via serverless function
+  // OUTPUT: success/error alert
+  // LOOP: safe to call from any page (except review/submit pages)
+  const saveDraft = async () => {
+    try {
+      const orderPayload = {
+        ...fullOrder,
+        orderStatus: "Draft",
+      };
+
+      const response = await hubspot.serverless("sendDraftToHubspot", {
+        parameters: {
+          fullOrder: orderPayload,
+          dealId: context.crm.objectId,
+          orderObjectId:
+            fullOrder.selectedOrderId ||
+            fullOrder.orderId ||
+            null,
+        },
+      });
+
+      if (response.body?.ok !== false) {
+        const newOrderId = response.body?.orderId;
+        if (newOrderId) {
+          setFullOrder((prev) => ({
+            ...prev,
+            orderId: newOrderId,
+            selectedOrderId: newOrderId,
+            orderStatus: "Draft",
+            orderNumber: response.body?.hubspotResponse?.properties?.order_id || prev.orderNumber,
+            lastSavedAt: response.body?.hubspotResponse?.properties?.last_saved_at || new Date().toISOString(),
+          }));
+        }
+        sendAlert({ message: "Order saved as draft", type: "success" });
+        setTagStatus("Draft");
+      } else {
+        sendAlert({ 
+          message: response.body?.error || "Failed to save draft", 
+          type: "danger" 
+        });
+      }
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      sendAlert({ 
+        message: "Error saving draft. Please try again.", 
+        type: "danger" 
+      });
+    }
+  };
+
   {/*
       const TestABCProductsSB = async () => {
     const response = await hubspot.serverless("abcProductsSB");
@@ -295,6 +350,9 @@ const Extension = ({
       )]
     : PRIMARY_FLOW_PAGES[0];
   const shouldDisableNext = NextButtonDisabled || !isFlowPage || isLastPrimaryPage;
+  
+  // Show save draft link on pages 0, 1, 2, 3 (not on 4=reviewSubmit or 5=successPage)
+  const showSaveDraftLink = orderPage !== 4 && orderPage !== 5;
 
   return (
     <>
@@ -310,6 +368,14 @@ const Extension = ({
       
       {renderPage(orderPage)}
       <Text></Text>
+
+      {showSaveDraftLink && (
+        <Flex justify="end">
+          <Button variant="secondary" onClick={saveDraft}>
+            Save as Draft
+          </Button>
+        </Flex>
+      )}
 
       <Divider />
       <Text></Text>
