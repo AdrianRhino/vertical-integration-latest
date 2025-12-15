@@ -31,7 +31,7 @@ const ReviewSubmit = ({
 }) => {
   const [crmProperties, setCrmProperties] = useState({});
   const [sumTotalPrice, setSumTotalPrice] = useState(0);
-  const [orderId, setOrderId] = useState("");
+  const [orderId, setOrderId] = useState(fullOrder.orderId || fullOrder.selectedOrderId || "");
   const deliveryAddress = useMemo(
     () =>
       selectDeliveryAddress({
@@ -57,6 +57,15 @@ const ReviewSubmit = ({
     console.log("tagStatus", tagStatus);
   }, []);
 
+  // Initialize orderId from fullOrder if not set
+  useEffect(() => {
+    if (!orderId && (fullOrder.orderId || fullOrder.selectedOrderId)) {
+      const existingOrderId = fullOrder.orderId || fullOrder.selectedOrderId;
+      setOrderId(existingOrderId);
+    }
+  }, [fullOrder.orderId, fullOrder.selectedOrderId]);
+
+  // Update fullOrder when orderId changes
   useEffect(() => {
     if (!orderId) {
       return;
@@ -65,7 +74,7 @@ const ReviewSubmit = ({
       ...prev,
       orderId,
       selectedOrderId: orderId,
-      orderStatus: "Draft",
+      orderStatus: prev.orderStatus || "Draft",
     }));
   }, [orderId, setFullOrder]);
 
@@ -105,9 +114,18 @@ const ReviewSubmit = ({
 
     const placedOrderAddress = formatAddressString(mergedDelivery);
 
+    // Calculate order total from items
+    const calculatedTotal = mergedItems.reduce(
+      (sum, row) => sum + (Number(row.qty) || 0) * (Number(row.unitPrice) || 0),
+      0
+    );
+
     return {
       ...base,
       ...fullOrder,
+      // Preserve orderId and selectedOrderId if they exist (important for draft updates)
+      orderId: fullOrder.orderId || base.orderId || null,
+      selectedOrderId: fullOrder.selectedOrderId || fullOrder.orderId || base.selectedOrderId || base.orderId || null,
       supplier: internalOrder.supplier || fullOrder.supplier || base.supplier || "",
       ticket: fullOrder.ticket || base.ticket || "",
       template: fullOrder.template || base.template || "",
@@ -117,61 +135,141 @@ const ReviewSubmit = ({
       templateItems: mergedTemplateItems,
       addressSnapshot,
       placed_order_address: placedOrderAddress,
+      orderTotal: fullOrder.orderTotal || calculatedTotal || 0,
+      orderStatus: fullOrder.orderStatus || "Draft",
     };
   };
 
   const sendDraftToHubspot = async (showAlert = true) => {
-    const orderPayload = buildOrderPayload();
-    const response = await hubspot.serverless("sendDraftToHubspot", {
-      parameters: {
-        fullOrder: orderPayload,
-        dealId: context.crm.objectId,
-        orderObjectId:
-          orderPayload.selectedOrderId ||
-          orderPayload.orderId ||
-          fullOrder.selectedOrderId ||
-          fullOrder.orderId ||
-          null,
-      },
-    });
-    console.log("response", response);
-    const newOrderId = response.body.orderId;
-    setOrderId(newOrderId);
-    const savedOrderNumber =
-      response.body.hubspotResponse?.properties?.order_id ||
-      orderPayload?.orderNumber;
-    const savedTimestamp =
-      response.body.hubspotResponse?.properties?.last_saved_at;
-    setFullOrder(() => ({
-      ...orderPayload,
-      orderNumber: savedOrderNumber,
-      lastSavedAt: savedTimestamp,
-      orderId: newOrderId,
-      selectedOrderId: newOrderId,
-    }));
-    if (showAlert) {
-      sendAlert({ message: "Order saved as draft", type: "success" });
+    try {
+      const orderPayload = buildOrderPayload();
+      
+      // Ensure we have a valid orderId/selectedOrderId for updates
+      const orderObjectId =
+        orderPayload.selectedOrderId ||
+        orderPayload.orderId ||
+        fullOrder.selectedOrderId ||
+        fullOrder.orderId ||
+        orderId ||
+        null;
+      
+      console.log("=== sendDraftToHubspot DEBUG ===");
+      console.log("orderObjectId:", orderObjectId);
+      console.log("orderPayload keys:", Object.keys(orderPayload));
+      console.log("orderPayload.orderId:", orderPayload.orderId);
+      console.log("orderPayload.selectedOrderId:", orderPayload.selectedOrderId);
+      console.log("fullOrder.orderId:", fullOrder.orderId);
+      console.log("fullOrder.selectedOrderId:", fullOrder.selectedOrderId);
+      
+      const response = await hubspot.serverless("sendDraftToHubspot", {
+        parameters: {
+          fullOrder: orderPayload,
+          dealId: context.crm.objectId,
+          orderObjectId: orderObjectId,
+        },
+      });
+      
+      console.log("=== sendDraftToHubspot RESPONSE ===");
+      console.log(JSON.stringify(response, null, 2));
+      
+      // Check for errors in response
+      if (response.body?.ok === false || response.statusCode >= 400) {
+        const errorMsg = response.body?.error || response.body?.message || "Failed to save draft";
+        console.error("❌ Draft save failed:", errorMsg);
+        if (showAlert) {
+          sendAlert({ 
+            message: `Failed to save draft: ${errorMsg}`, 
+            type: "danger" 
+          });
+        }
+        throw new Error(errorMsg);
+      }
+      
+      const newOrderId = response.body?.orderId;
+      if (!newOrderId) {
+        throw new Error("No orderId returned from draft save");
+      }
+      
+      setOrderId(newOrderId);
+      const savedOrderNumber =
+        response.body?.hubspotResponse?.properties?.order_id ||
+        orderPayload?.orderNumber ||
+        orderPayload?.order_id;
+      const savedTimestamp =
+        response.body?.hubspotResponse?.properties?.last_saved_at ||
+        new Date().toISOString();
+      
+      setFullOrder((prev) => ({
+        ...prev,
+        ...orderPayload,
+        orderNumber: savedOrderNumber,
+        lastSavedAt: savedTimestamp,
+        orderId: newOrderId,
+        selectedOrderId: newOrderId,
+        orderStatus: "Draft",
+      }));
+      
+      if (showAlert) {
+        sendAlert({ message: "Order saved as draft", type: "success" });
+      }
+      
+      return newOrderId; // Return the orderId for use in .then()
+    } catch (error) {
+      console.error("❌ Error in sendDraftToHubspot:", error);
+      if (showAlert) {
+        sendAlert({ 
+          message: `Error saving draft: ${error.message || "Unknown error"}`, 
+          type: "danger" 
+        });
+      }
+      throw error; // Re-throw so caller can handle it
     }
-    // Send order to Supplier
-    return newOrderId; // Return the orderId for use in .then()
   };
 
   const sendOrderToHubspot = async () => {
-    let orderIdToReturn = null;
-    if (parsedOrder && fullOrder.selectedOrderId) {
-      // Using existing order - update its status
-      orderIdToReturn = fullOrder.selectedOrderId;
-      await setSubmitStatus("Submitted", orderIdToReturn);
-      sendAlert({ message: "Order updated successfully", type: "success" });
-    } else {
-      // Creating new order - save then update status
-      // Pass false to suppress the "saved as draft" alert since we'll show "Order created successfully" instead
-      const newOrderId = await sendDraftToHubspot(false);
-      orderIdToReturn = newOrderId;
-      await setSubmitStatus("Submitted", newOrderId);
-      sendAlert({ message: "Order created successfully", type: "success" });
+    try {
+      let orderIdToReturn = null;
+      
+      // Check if we have an existing order (from draft save or loaded order)
+      const existingOrderId = 
+        fullOrder.selectedOrderId || 
+        fullOrder.orderId || 
+        orderId ||
+        parsedOrder?.orderId ||
+        null;
+      
+      console.log("=== sendOrderToHubspot DEBUG ===");
+      console.log("existingOrderId:", existingOrderId);
+      console.log("parsedOrder exists:", !!parsedOrder);
+      console.log("fullOrder.selectedOrderId:", fullOrder.selectedOrderId);
+      console.log("fullOrder.orderId:", fullOrder.orderId);
+      console.log("orderId state:", orderId);
+      
+      if (existingOrderId) {
+        // Using existing order - update its status
+        console.log("Updating existing order:", existingOrderId);
+        orderIdToReturn = existingOrderId;
+        await setSubmitStatus("Submitted", existingOrderId);
+        sendAlert({ message: "Order updated successfully", type: "success" });
+      } else {
+        // Creating new order - save then update status
+        // Pass false to suppress the "saved as draft" alert since we'll show "Order created successfully" instead
+        console.log("Creating new order...");
+        const newOrderId = await sendDraftToHubspot(false);
+        orderIdToReturn = newOrderId;
+        await setSubmitStatus("Submitted", newOrderId);
+        sendAlert({ message: "Order created successfully", type: "success" });
+      }
+      
+      return orderIdToReturn;
+    } catch (error) {
+      console.error("❌ Error in sendOrderToHubspot:", error);
+      sendAlert({ 
+        message: `Error submitting order: ${error.message || "Unknown error"}`, 
+        type: "danger" 
+      });
+      throw error;
     }
-    return orderIdToReturn;
   };
 
   const setSubmitStatus = async (status, orderId) => {
@@ -585,7 +683,14 @@ const ReviewSubmit = ({
               }}>
               Submit Order
             </Button>
-            <Button variant="secondary" onClick={() => sendDraftToHubspot()}>
+            <Button variant="secondary" onClick={async () => {
+              try {
+                await sendDraftToHubspot();
+              } catch (error) {
+                console.error("❌ Error saving draft from review page:", error);
+                // Error already handled in sendDraftToHubspot with alert
+              }
+            }}>
               Save as Draft
             </Button>
           </ButtonRow>

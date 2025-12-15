@@ -286,10 +286,24 @@ const Extension = ({
   // LOOP: safe to call from any page (except review/submit pages)
   const saveDraft = async () => {
     try {
+      // Calculate orderTotal if not present
+      let orderTotal = fullOrder.orderTotal;
+      if (!orderTotal && fullOrder.fullOrderItems) {
+        orderTotal = fullOrder.fullOrderItems.reduce(
+          (sum, item) => sum + (Number(item.qty) || 0) * (Number(item.unitPrice) || 0),
+          0
+        );
+      }
+
       const orderPayload = {
         ...fullOrder,
         orderStatus: "Draft",
+        ...(orderTotal !== undefined ? { orderTotal: orderTotal } : {}),
       };
+
+      console.log("=== saveDraft DEBUG ===");
+      console.log("orderObjectId:", fullOrder.selectedOrderId || fullOrder.orderId);
+      console.log("orderPayload keys:", Object.keys(orderPayload));
 
       const response = await hubspot.serverless("sendDraftToHubspot", {
         parameters: {
@@ -302,30 +316,44 @@ const Extension = ({
         },
       });
 
-      if (response.body?.ok !== false) {
-        const newOrderId = response.body?.orderId;
-        if (newOrderId) {
-          setFullOrder((prev) => ({
-            ...prev,
-            orderId: newOrderId,
-            selectedOrderId: newOrderId,
-            orderStatus: "Draft",
-            orderNumber: response.body?.hubspotResponse?.properties?.order_id || prev.orderNumber,
-            lastSavedAt: response.body?.hubspotResponse?.properties?.last_saved_at || new Date().toISOString(),
-          }));
-        }
+      console.log("=== saveDraft RESPONSE ===");
+      console.log(JSON.stringify(response, null, 2));
+
+      // Check for errors
+      if (response.body?.ok === false || response.statusCode >= 400) {
+        const errorMsg = response.body?.error || response.body?.message || "Failed to save draft";
+        console.error("❌ Draft save failed:", errorMsg);
+        sendAlert({ 
+          message: `Failed to save draft: ${errorMsg}`, 
+          type: "danger" 
+        });
+        return;
+      }
+
+      const newOrderId = response.body?.orderId;
+      if (newOrderId) {
+        setFullOrder((prev) => ({
+          ...prev,
+          orderId: newOrderId,
+          selectedOrderId: newOrderId,
+          orderStatus: "Draft",
+          orderNumber: response.body?.hubspotResponse?.properties?.order_id || prev.orderNumber,
+          lastSavedAt: response.body?.hubspotResponse?.properties?.last_saved_at || new Date().toISOString(),
+          ...(orderTotal !== undefined ? { orderTotal: orderTotal } : {}),
+        }));
         sendAlert({ message: "Order saved as draft", type: "success" });
         setTagStatus("Draft");
       } else {
+        console.warn("⚠️ No orderId returned from draft save");
         sendAlert({ 
-          message: response.body?.error || "Failed to save draft", 
-          type: "danger" 
+          message: "Draft save completed but no order ID returned", 
+          type: "warning" 
         });
       }
     } catch (error) {
-      console.error("Error saving draft:", error);
+      console.error("❌ Error saving draft:", error);
       sendAlert({ 
-        message: "Error saving draft. Please try again.", 
+        message: `Error saving draft: ${error.message || "Unknown error"}`, 
         type: "danger" 
       });
     }
