@@ -37,12 +37,12 @@ function buildHardcodedTestPayload(orderBody) {
         "purchaseOrderNo": `TEST-PO-001`, // Unique PO
         "lineItems": [
             {
-                "itemNumber": "315692",
+                "itemNumber": `${"315692" || orderBody?.sku || ""}`,
                 "quantity": 1,
                 "unitOfMeasure": "EA",
                 "description": "Test Order",
                 "lineComments": "This is a test order. Please void.",
-                "productNumber": "315692"
+                "productNumber": `${"315692" || orderBody?.sku || ""}`
             }
         ],
         "shipping": {
@@ -61,6 +61,9 @@ function buildHardcodedTestPayload(orderBody) {
         "specialInstruction": "This is a test order. Please void. " + (orderBody?.delivery?.notes || ""),
         "pickupDate": `${orderBody?.delivery?.date || ""}`, // Ensure this format is correct for Beacon
         "pickupTime": `${orderBody?.delivery?.time || "Anytime"}`, // Default if missing
+        // CRITICAL: Set checkForAvailability to "no" for test payload (sandbox)
+        // This prevents "Cannot read properties of null" errors when product catalog is not loaded
+        "checkForAvailability": "no"
     };
 }
 
@@ -151,6 +154,169 @@ function extractAndValidateAddress(formatted, normalized, orderBody) {
         state: state.trim(),
         country: "USA" // Default to USA
     };
+}
+
+/**
+ * Validate and truncate payload fields according to Beacon API requirements
+ * @param {Object} payload - The payload to validate and truncate
+ * @returns {Object} - Validated and truncated payload
+ */
+function validateAndTruncateBeaconPayload(payload) {
+    const validated = { ...payload };
+    
+    // accountId: Max Length: 6
+    if (validated.accountId) {
+        const original = String(validated.accountId).trim();
+        if (original.length > 6) {
+            console.warn(`⚠️ accountId truncated from ${original.length} to 6 characters: "${original}" -> "${original.substring(0, 6)}"`);
+        }
+        validated.accountId = original.substring(0, 6);
+    }
+    
+    // job.jobName: Max Length: 15
+    if (validated.job?.jobName) {
+        const original = String(validated.job.jobName).trim();
+        if (original.length > 15) {
+            console.warn(`⚠️ job.jobName truncated from ${original.length} to 15 characters: "${original}" -> "${original.substring(0, 15)}"`);
+        }
+        validated.job.jobName = original.substring(0, 15);
+    }
+    
+    // job.jobNumber: Max Length: 7
+    if (validated.job?.jobNumber) {
+        const original = String(validated.job.jobNumber).trim();
+        if (original.length > 7) {
+            console.warn(`⚠️ job.jobNumber truncated from ${original.length} to 7 characters: "${original}" -> "${original.substring(0, 7)}"`);
+        }
+        validated.job.jobNumber = original.substring(0, 7);
+    }
+    
+    // purchaseOrderNo: Max Length: 22
+    if (validated.purchaseOrderNo) {
+        validated.purchaseOrderNo = String(validated.purchaseOrderNo).trim().substring(0, 22);
+    }
+    
+    // shipping.address fields
+    if (validated.shipping?.address) {
+        if (validated.shipping.address.address1) {
+            validated.shipping.address.address1 = String(validated.shipping.address.address1).trim().substring(0, 30);
+        }
+        if (validated.shipping.address.address2) {
+            validated.shipping.address.address2 = String(validated.shipping.address.address2).trim().substring(0, 30);
+        }
+        if (validated.shipping.address.city) {
+            validated.shipping.address.city = String(validated.shipping.address.city).trim().substring(0, 25);
+        }
+        if (validated.shipping.address.postalCode) {
+            validated.shipping.address.postalCode = String(validated.shipping.address.postalCode).trim().substring(0, 10);
+        }
+        if (validated.shipping.address.state) {
+            validated.shipping.address.state = String(validated.shipping.address.state).trim().substring(0, 2);
+        }
+    }
+    
+    // shipping.shippingMethod: Max Length: 1
+    if (validated.shipping?.shippingMethod) {
+        validated.shipping.shippingMethod = String(validated.shipping.shippingMethod).trim().substring(0, 1);
+    }
+    
+    // shipping.shippingBranch: Max Length: 4
+    if (validated.shipping?.shippingBranch) {
+        validated.shipping.shippingBranch = String(validated.shipping.shippingBranch).trim().substring(0, 4);
+    }
+    
+    // specialInstruction: Max Length: 234
+    if (validated.specialInstruction) {
+        validated.specialInstruction = String(validated.specialInstruction).trim().substring(0, 234);
+    }
+    
+    // pickupDate: Format: yyyy-mm-dd
+    if (validated.pickupDate) {
+        const dateStr = String(validated.pickupDate).trim();
+        // If it's already in yyyy-mm-dd format, keep it; otherwise try to convert
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            try {
+                const date = new Date(dateStr);
+                if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    validated.pickupDate = `${year}-${month}-${day}`;
+                }
+            } catch (e) {
+                console.warn('⚠️ Could not parse pickupDate:', dateStr);
+            }
+        }
+    }
+    
+    // pickupTime: Should be one of ["Morning", "Afternoon", "Anytime", "Special Request"]
+    if (validated.pickupTime) {
+        const timeStr = String(validated.pickupTime).trim();
+        const validTimes = ['Morning', 'Afternoon', 'Anytime', 'Special Request'];
+        const timeUpper = timeStr.charAt(0).toUpperCase() + timeStr.slice(1).toLowerCase();
+        
+        if (validTimes.includes(timeUpper)) {
+            validated.pickupTime = timeUpper;
+        } else if (timeStr.toLowerCase() === 'anytime') {
+            validated.pickupTime = 'Anytime';
+        } else {
+            // Default to Anytime if invalid
+            console.warn(`⚠️ Invalid pickupTime "${timeStr}", defaulting to "Anytime"`);
+            validated.pickupTime = 'Anytime';
+        }
+    }
+    
+    // lineItems validation and truncation
+    if (validated.lineItems && Array.isArray(validated.lineItems)) {
+        validated.lineItems = validated.lineItems.map((item) => {
+            const validatedItem = { ...item };
+            
+            // itemNumber: Max Length: 6
+            if (validatedItem.itemNumber) {
+                const original = String(validatedItem.itemNumber).trim();
+                if (original.length > 6) {
+                    console.warn(`⚠️ lineItems[${index}].itemNumber truncated from ${original.length} to 6 characters: "${original}" -> "${original.substring(0, 6)}"`);
+                }
+                validatedItem.itemNumber = original.substring(0, 6);
+            }
+            
+            // unitOfMeasure: Max Length: 3
+            if (validatedItem.unitOfMeasure) {
+                const original = String(validatedItem.unitOfMeasure).trim();
+                if (original.length > 3) {
+                    console.warn(`⚠️ lineItems[${index}].unitOfMeasure truncated from ${original.length} to 3 characters: "${original}" -> "${original.substring(0, 3)}"`);
+                }
+                validatedItem.unitOfMeasure = original.substring(0, 3);
+            }
+            
+            // description: Max Length: 128
+            if (validatedItem.description) {
+                validatedItem.description = String(validatedItem.description).trim().substring(0, 128);
+            }
+            
+            // productNumber: Max Length: 40
+            if (validatedItem.productNumber) {
+                validatedItem.productNumber = String(validatedItem.productNumber).trim().substring(0, 40);
+            }
+            
+            // lineComments: Max Length: 2048 (optional)
+            if (validatedItem.lineComments) {
+                validatedItem.lineComments = String(validatedItem.lineComments).trim().substring(0, 2048);
+            }
+            
+            // quantity: Integer, Max Length: 10
+            if (validatedItem.quantity !== undefined && validatedItem.quantity !== null) {
+                const qty = parseInt(validatedItem.quantity, 10);
+                if (!isNaN(qty)) {
+                    validatedItem.quantity = Math.min(Math.max(0, qty), 9999999999); // Max 10 digits
+                }
+            }
+            
+            return validatedItem;
+        });
+    }
+    
+    return validated;
 }
 
 /**
@@ -289,7 +455,11 @@ function buildPayload(context, credentials, orderBody) {
         },
         specialInstruction: formatted.specialInstruction || normalized.delivery?.notes || "",
         pickupDate: formatted.pickupDate || normalized.delivery?.date || "",
-        pickupTime: formatted.pickupTime || normalized.delivery?.timeCode
+        pickupTime: formatted.pickupTime || normalized.delivery?.timeCode,
+        // CRITICAL: Set checkForAvailability based on environment
+        // Sandbox/UAT: "no" (catalog may not be loaded, prevents null errors)
+        // Production: Allow default behavior (catalog should be loaded and working)
+        checkForAvailability: credentials.environment === "sandbox" ? "no" : undefined
     };
     
     // Only include apiSiteId if it's configured and not empty (from credentials or formatted)
@@ -297,6 +467,11 @@ function buildPayload(context, credentials, orderBody) {
         // Already set above
     } else if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
         payload.apiSiteId = credentials.apiSiteId;
+    }
+    
+    // Remove checkForAvailability if it's undefined (cleaner payload for production)
+    if (payload.checkForAvailability === undefined) {
+        delete payload.checkForAvailability;
     }
     
     // CRITICAL: Final safety check - ensure job.jobNumber is ALWAYS set and non-empty (Beacon API requirement)
@@ -330,24 +505,24 @@ function buildPayload(context, credentials, orderBody) {
     const validationErrors = [];
     if (!payload.accountId || payload.accountId.trim() === '') {
         validationErrors.push('accountId is required');
+    } else if (payload.accountId.length > 6) {
+        validationErrors.push(`accountId exceeds max length of 6 (current: ${payload.accountId.length})`);
     }
     if (!payload.lineItems || payload.lineItems.length === 0) {
         validationErrors.push('lineItems array is required and cannot be empty');
     } else {
         // Validate each line item has required fields for Beacon
+        // NOTE: unitOfMeasure and productNumber are added AFTER buildPayload returns
+        // (see lines 623-640 where line items are transformed), so we only validate
+        // itemNumber and quantity here. Full validation happens after transformation.
         payload.lineItems.forEach((item, index) => {
             if (!item.itemNumber || String(item.itemNumber).trim() === '') {
                 validationErrors.push(`lineItems[${index}].itemNumber is required`);
             }
-            if (!item.unitOfMeasure || String(item.unitOfMeasure).trim() === '') {
-                validationErrors.push(`lineItems[${index}].unitOfMeasure is required`);
-            }
-            if (!item.productNumber || String(item.productNumber).trim() === '') {
-                validationErrors.push(`lineItems[${index}].productNumber is required`);
-            }
             if (item.quantity === undefined || item.quantity === null) {
                 validationErrors.push(`lineItems[${index}].quantity is required`);
             }
+            // Removed validation for unitOfMeasure and productNumber - they're added after buildPayload returns
         });
     }
     if (!payload.shipping || !payload.shipping.address || !payload.shipping.address.address1 || payload.shipping.address.address1.trim() === '') {
@@ -355,6 +530,14 @@ function buildPayload(context, credentials, orderBody) {
     }
     if (!payload.job || !payload.job.jobNumber || payload.job.jobNumber.trim() === '') {
         validationErrors.push('job.jobNumber is required');
+    } else if (payload.job.jobNumber.length > 7) {
+        validationErrors.push(`job.jobNumber exceeds max length of 7 (current: ${payload.job.jobNumber.length})`);
+    }
+    if (payload.job?.jobName && payload.job.jobName.length > 15) {
+        validationErrors.push(`job.jobName exceeds max length of 15 (current: ${payload.job.jobName.length})`);
+    }
+    if (payload.purchaseOrderNo && payload.purchaseOrderNo.length > 22) {
+        validationErrors.push(`purchaseOrderNo exceeds max length of 22 (current: ${payload.purchaseOrderNo.length})`);
     }
     
     // Final safety check - if jobNumber is still missing, force it
@@ -622,21 +805,66 @@ exports.main = async (context = {}) => {
         
         // CRITICAL: Ensure line items have required Beacon fields
         if (payload.lineItems && Array.isArray(payload.lineItems)) {
-            payload.lineItems = payload.lineItems.map((item) => {
+            payload.lineItems = payload.lineItems.map((item, index) => {
+                console.log(`🔍 Transforming line item ${index}:`, {
+                    before: { ...item },
+                    hasItemNumber: !!item.itemNumber,
+                    hasProductNumber: !!item.productNumber,
+                    hasUnitOfMeasure: !!item.unitOfMeasure,
+                    hasUom: !!item.uom
+                });
+                
                 // Ensure productNumber exists (required by Beacon - same as itemNumber)
                 if (!item.productNumber) {
                     item.productNumber = item.itemNumber || '';
+                    console.log(`  ✅ Added productNumber: ${item.productNumber}`);
                 }
                 // Ensure unitOfMeasure exists (required by Beacon - not 'uom')
                 if (!item.unitOfMeasure && item.uom) {
                     item.unitOfMeasure = item.uom;
                     delete item.uom; // Remove 'uom' if it exists
+                    console.log(`  ✅ Converted uom to unitOfMeasure: ${item.unitOfMeasure}`);
                 }
                 if (!item.unitOfMeasure) {
                     item.unitOfMeasure = 'EA'; // Default fallback
+                    console.log(`  ✅ Set default unitOfMeasure: ${item.unitOfMeasure}`);
                 }
+                
+                // Ensure description exists (Beacon may need this for product lookup)
+                if (!item.description && item.title) {
+                    item.description = item.title;
+                }
+                if (!item.description) {
+                    item.description = item.itemNumber || 'Product';
+                }
+                
+                console.log(`  ✅ Final line item ${index}:`, {
+                    itemNumber: item.itemNumber,
+                    productNumber: item.productNumber,
+                    quantity: item.quantity,
+                    unitOfMeasure: item.unitOfMeasure,
+                    description: item.description,
+                    allKeys: Object.keys(item)
+                });
+                
                 return item;
             });
+            
+            // Validate line items AFTER transformation
+            const lineItemErrors = [];
+            payload.lineItems.forEach((item, index) => {
+                if (!item.unitOfMeasure || String(item.unitOfMeasure).trim() === '') {
+                    lineItemErrors.push(`lineItems[${index}].unitOfMeasure is required but was not set during transformation`);
+                }
+                if (!item.productNumber || String(item.productNumber).trim() === '') {
+                    lineItemErrors.push(`lineItems[${index}].productNumber is required but was not set during transformation`);
+                }
+            });
+            
+            if (lineItemErrors.length > 0) {
+                console.error('❌ Line item validation failed after transformation:', lineItemErrors);
+                throw new Error(`Beacon line item validation failed: ${lineItemErrors.join(', ')}`);
+            }
         }
         
         // If accountId is still missing, inject it from login response
@@ -656,7 +884,7 @@ exports.main = async (context = {}) => {
         fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:498',message:'BEACON_PAYLOAD_BEFORE_SUBMIT',data:{hasAccountId:!!payload.accountId,accountId:payload.accountId,hasLineItems:!!payload.lineItems,lineItemsCount:payload.lineItems?.length||0,hasShipping:!!payload.shipping,hasAddress:!!payload.shipping?.address,addressLine1:payload.shipping?.address?.address1,hasJob:!!payload.job,jobName:payload.job?.jobName,jobNumber:payload.job?.jobNumber,hasJobNumber:!!payload.job?.jobNumber,hasPurchaseOrderNo:!!payload.purchaseOrderNo,payloadKeys:Object.keys(payload)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
         // #endregion
         
-        // CRITICAL: Final safety check - ensure job.jobNumber exists before API call
+        // CRITICAL: Final safety check - ensure job.jobNumber exists before validation
         if (!payload.job) {
             console.error('❌ CRITICAL: payload.job is missing! Creating job object.');
             payload.job = { checked: false, jobName: '', jobNumber: '999' };
@@ -666,10 +894,17 @@ exports.main = async (context = {}) => {
             payload.job.jobNumber = '999';
         }
         
+        // CRITICAL: Validate and truncate all fields according to Beacon API requirements
+        // This must happen AFTER all transformations but BEFORE sending to API
+        console.log("🔍 Validating and truncating payload according to Beacon API requirements...");
+        payload = validateAndTruncateBeaconPayload(payload);
+        console.log("✅ Payload validated and truncated");
+        
         console.log("Submitting order to:", orderUrl);
         console.log("Payload structure:", {
             hasAccountId: !!payload.accountId,
             accountId: payload.accountId,
+            accountIdLength: payload.accountId?.length || 0,
             hasLineItems: !!payload.lineItems,
             lineItemsCount: payload.lineItems?.length || 0,
             hasShipping: !!payload.shipping,
@@ -678,11 +913,13 @@ exports.main = async (context = {}) => {
             hasJob: !!payload.job,
             jobChecked: payload.job?.checked,
             jobName: payload.job?.jobName,
+            jobNameLength: payload.job?.jobName?.length || 0,
             jobNumber: payload.job?.jobNumber,
             jobNumberType: typeof payload.job?.jobNumber,
-            jobNumberLength: payload.job?.jobNumber?.length,
+            jobNumberLength: payload.job?.jobNumber?.length || 0,
             hasJobNumber: !!payload.job?.jobNumber && payload.job.jobNumber.trim() !== '',
-            hasPurchaseOrderNo: !!payload.purchaseOrderNo
+            hasPurchaseOrderNo: !!payload.purchaseOrderNo,
+            purchaseOrderNoLength: payload.purchaseOrderNo?.length || 0
         });
         
         // Log the full job object to verify structure
@@ -695,6 +932,39 @@ exports.main = async (context = {}) => {
         // Log the exact payload being sent to Beacon API
         console.log("📤 EXACT PAYLOAD BEING SENT TO BEACON API:");
         console.log(JSON.stringify(payload, null, 2));
+        
+        // Log line items structure for debugging
+        console.log("📦 LINE ITEMS STRUCTURE:");
+        if (payload.lineItems && Array.isArray(payload.lineItems)) {
+            payload.lineItems.forEach((item, index) => {
+                console.log(`  Item ${index}:`, {
+                    itemNumber: item.itemNumber,
+                    itemNumberLength: item.itemNumber?.length || 0,
+                    productNumber: item.productNumber,
+                    productNumberLength: item.productNumber?.length || 0,
+                    quantity: item.quantity,
+                    unitOfMeasure: item.unitOfMeasure,
+                    unitOfMeasureLength: item.unitOfMeasure?.length || 0,
+                    description: item.description,
+                    descriptionLength: item.description?.length || 0,
+                    hasLineComments: !!item.lineComments,
+                    allKeys: Object.keys(item)
+                });
+            });
+        } else {
+            console.log("  ⚠️ lineItems is missing or not an array");
+        }
+        
+        // Log critical field lengths
+        console.log("📏 CRITICAL FIELD LENGTHS:");
+        console.log({
+            accountId: payload.accountId?.length || 0,
+            jobName: payload.job?.jobName?.length || 0,
+            jobNumber: payload.job?.jobNumber?.length || 0,
+            purchaseOrderNo: payload.purchaseOrderNo?.length || 0,
+            pickupDate: payload.pickupDate,
+            pickupTime: payload.pickupTime
+        });
         
         let orderResponse;
         
