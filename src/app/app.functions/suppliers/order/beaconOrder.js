@@ -184,19 +184,101 @@ function buildPayload(context, credentials, orderBody) {
     
     const formatted = formatOrder(normalized, "BEACON", credentials.environment);
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:185',message:'AFTER_FORMAT_ORDER',data:{hasFormatted:!!formatted,formattedKeys:formatted?Object.keys(formatted):[],formattedAccountId:formatted?.accountId,formattedAccountNumber:formatted?.accountNumber,normalizedAccountNumber:normalized?.accountNumber,orderBodyAccountNumber:orderBody?.accountNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H3'})}).catch(()=>{});
+    // #endregion
+    
     // Extract and validate address from multiple sources
     const address = extractAndValidateAddress(formatted, normalized, orderBody);
     
     // formatOrder returns object for BEACON (not array like ABC)
     // Use formatted values directly (formatOrder handles defaults from config)
     // Only use normalized as fallback if formatted doesn't have it and it's not in config defaults
+    // Config maps accountNumber to accountId, so formatted.accountId should be set
+    const accountIdValue = formatted.accountId || formatted.accountNumber || normalized.accountNumber || orderBody.accountNumber || '';
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:194',message:'ACCOUNT_ID_RESOLUTION',data:{accountIdValue,hasAccountId:!!accountIdValue,accountIdLength:accountIdValue?.length||0,formattedAccountId:formatted?.accountId,formattedAccountNumber:formatted?.accountNumber,normalizedAccountNumber:normalized?.accountNumber,orderBodyAccountNumber:orderBody?.accountNumber,formattedKeys:formatted?Object.keys(formatted):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H3'})}).catch(()=>{});
+    // #endregion
+    
+    // Validate accountId is not empty (Beacon API requirement)
+    if (!accountIdValue || accountIdValue.trim() === '') {
+        const errorMsg = 'accountId is required for Beacon orders. Ensure accountNumber is set in the order.';
+        console.error('❌', errorMsg);
+        console.error('Account ID resolution sources:', {
+            formattedAccountId: formatted?.accountId,
+            formattedAccountNumber: formatted?.accountNumber,
+            normalizedAccountNumber: normalized?.accountNumber,
+            orderBodyAccountNumber: orderBody?.accountNumber,
+            formattedKeys: formatted ? Object.keys(formatted) : []
+        });
+        throw new Error(errorMsg);
+    }
+    
+    // Resolve jobNumber with fallback - Beacon API requires this field
+    // Check each source and use first non-empty value, or default to '999'
+    const formattedJobNumber = formatted.job?.jobNumber;
+    const normalizedJobNumber = normalized.jobNumber;
+    const orderBodyJobNumber = orderBody.jobNumber;
+    
+    // Helper to check if value is non-empty
+    const isNonEmpty = (val) => val !== undefined && val !== null && String(val).trim() !== '';
+    
+    // Find first non-empty value
+    let jobNumberValue = '';
+    if (isNonEmpty(formattedJobNumber)) {
+        jobNumberValue = String(formattedJobNumber).trim();
+    } else if (isNonEmpty(normalizedJobNumber)) {
+        jobNumberValue = String(normalizedJobNumber).trim();
+    } else if (isNonEmpty(orderBodyJobNumber)) {
+        jobNumberValue = String(orderBodyJobNumber).trim();
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:219',message:'JOB_NUMBER_RESOLUTION',data:{jobNumberValue,hasJobNumber:isNonEmpty(jobNumberValue),formattedJobNumber,normalizedJobNumber,orderBodyJobNumber,formattedJobNumberType:typeof formattedJobNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+    // #endregion
+    
+    // If jobNumber is still empty, use default (Beacon API requirement)
+    const finalJobNumber = isNonEmpty(jobNumberValue) ? jobNumberValue : '999';
+    
+    if (!isNonEmpty(jobNumberValue)) {
+        console.warn('⚠️ jobNumber is empty - using default fallback: 999');
+        console.warn('JobNumber sources:', {
+            formattedJobNumber: formattedJobNumber,
+            normalizedJobNumber: normalizedJobNumber,
+            orderBodyJobNumber: orderBodyJobNumber,
+            allEmpty: true
+        });
+    } else {
+        console.log('✅ jobNumber resolved:', finalJobNumber);
+    }
+    
+    // Ensure jobNumber is always set (Beacon API requirement)
+    console.log('🔍 JobNumber resolution:', {
+        formattedJobNumber: formatted.job?.jobNumber,
+        normalizedJobNumber: normalized.jobNumber,
+        orderBodyJobNumber: orderBody.jobNumber,
+        jobNumberValue: jobNumberValue,
+        finalJobNumber: finalJobNumber
+    });
+    
+    // CRITICAL: Ensure finalJobNumber is never empty (Beacon API rejects empty string)
+    const safeJobNumber = (finalJobNumber && String(finalJobNumber).trim() !== '') ? String(finalJobNumber).trim() : '999';
+    
+    console.log('🔍 Final jobNumber check:', {
+        finalJobNumber: finalJobNumber,
+        finalJobNumberType: typeof finalJobNumber,
+        safeJobNumber: safeJobNumber,
+        willUseDefault: safeJobNumber === '999'
+    });
+    
     const payload = {
-        accountId: formatted.accountId || normalized.accountNumber,
+        accountId: accountIdValue.trim(),
         apiSiteId: formatted.apiSiteId || (credentials.apiSiteId && credentials.apiSiteId.trim() !== "" ? credentials.apiSiteId : undefined),
         job: {
-            checked: formatted.job?.checked,
-            jobName: formatted.job?.jobName || normalized.jobName,
-            jobNumber: formatted.job?.jobNumber || normalized.jobNumber
+            checked: formatted.job?.checked !== undefined ? formatted.job.checked : false,
+            jobName: formatted.job?.jobName || normalized.jobName || '',
+            jobNumber: safeJobNumber // ALWAYS non-empty - either from data or default '999'
         },
         purchaseOrderNo: formatted.purchaseOrderNo || normalized.poNumber || `PO-${Date.now()}`,
         lineItems: formatted.lineItems || [],
@@ -216,6 +298,85 @@ function buildPayload(context, credentials, orderBody) {
     } else if (credentials.apiSiteId && credentials.apiSiteId.trim() !== "") {
         payload.apiSiteId = credentials.apiSiteId;
     }
+    
+    // CRITICAL: Final safety check - ensure job.jobNumber is ALWAYS set and non-empty (Beacon API requirement)
+    if (!payload.job) {
+        console.error('❌ CRITICAL: payload.job is missing! Creating job object.');
+        payload.job = { checked: false, jobName: '', jobNumber: '999' };
+    } else {
+        // Force jobNumber to be non-empty string
+        const currentJobNumber = payload.job.jobNumber;
+        if (!currentJobNumber || String(currentJobNumber).trim() === '') {
+            console.error('❌ CRITICAL: payload.job.jobNumber is empty or missing! Current value:', currentJobNumber, 'Type:', typeof currentJobNumber);
+            payload.job.jobNumber = '999';
+            console.log('✅ Forced job.jobNumber to default: 999');
+        } else {
+            // Ensure it's a string and trimmed
+            payload.job.jobNumber = String(currentJobNumber).trim();
+            console.log('✅ job.jobNumber is valid:', payload.job.jobNumber);
+        }
+    }
+    
+    // Final verification log
+    console.log('🔍 Final payload.job verification BEFORE validation:', JSON.stringify(payload.job, null, 2));
+    
+    // ABSOLUTE FINAL CHECK - ensure jobNumber is never empty (this should never trigger if code is correct)
+    if (payload.job && (!payload.job.jobNumber || String(payload.job.jobNumber).trim() === '')) {
+        console.error('❌❌❌ CRITICAL: job.jobNumber is STILL empty after all checks! Forcing to 999');
+        payload.job.jobNumber = '999';
+    }
+    
+    // Validate payload before returning
+    const validationErrors = [];
+    if (!payload.accountId || payload.accountId.trim() === '') {
+        validationErrors.push('accountId is required');
+    }
+    if (!payload.lineItems || payload.lineItems.length === 0) {
+        validationErrors.push('lineItems array is required and cannot be empty');
+    } else {
+        // Validate each line item has required fields for Beacon
+        payload.lineItems.forEach((item, index) => {
+            if (!item.itemNumber || String(item.itemNumber).trim() === '') {
+                validationErrors.push(`lineItems[${index}].itemNumber is required`);
+            }
+            if (!item.unitOfMeasure || String(item.unitOfMeasure).trim() === '') {
+                validationErrors.push(`lineItems[${index}].unitOfMeasure is required`);
+            }
+            if (!item.productNumber || String(item.productNumber).trim() === '') {
+                validationErrors.push(`lineItems[${index}].productNumber is required`);
+            }
+            if (item.quantity === undefined || item.quantity === null) {
+                validationErrors.push(`lineItems[${index}].quantity is required`);
+            }
+        });
+    }
+    if (!payload.shipping || !payload.shipping.address || !payload.shipping.address.address1 || payload.shipping.address.address1.trim() === '') {
+        validationErrors.push('shipping.address.address1 is required');
+    }
+    if (!payload.job || !payload.job.jobNumber || payload.job.jobNumber.trim() === '') {
+        validationErrors.push('job.jobNumber is required');
+    }
+    
+    // Final safety check - if jobNumber is still missing, force it
+    if (validationErrors.length === 0 && (!payload.job.jobNumber || payload.job.jobNumber.trim() === '')) {
+        console.error('❌ CRITICAL: job.jobNumber validation passed but value is still empty! Forcing default.');
+        payload.job.jobNumber = '999';
+    }
+    
+    if (validationErrors.length > 0) {
+        console.error('❌ Beacon payload validation failed:', validationErrors);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:245',message:'BEACON_PAYLOAD_VALIDATION_FAILED',data:{validationErrors,payloadKeys:Object.keys(payload),hasAccountId:!!payload.accountId,hasLineItems:!!payload.lineItems,lineItemsCount:payload.lineItems?.length||0,hasShippingAddress:!!payload.shipping?.address,addressLine1:payload.shipping?.address?.address1},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+        // #endregion
+        throw new Error(`Beacon payload validation failed: ${validationErrors.join(', ')}`);
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:300',message:'BEACON_PAYLOAD_VALIDATED',data:{hasAccountId:!!payload.accountId,hasLineItems:!!payload.lineItems,lineItemsCount:payload.lineItems?.length||0,hasShippingAddress:!!payload.shipping?.address,addressLine1:payload.shipping?.address?.address1,hasJob:!!payload.job,hasJobNumber:!!payload.job?.jobNumber,jobNumber:payload.job?.jobNumber,jobNumberType:typeof payload.job?.jobNumber,payloadKeys:Object.keys(payload),jobKeys:payload.job?Object.keys(payload.job):[]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+    // #endregion
+    
+    // Final verification - log the exact payload structure
+    console.log('✅ Final payload job object:', JSON.stringify(payload.job, null, 2));
     
     return payload;
 }
@@ -443,16 +604,97 @@ exports.main = async (context = {}) => {
             };
         }
 
-        // Step 2: Submit order with authentication
+        // Step 2: Extract accountId from login response if not in orderBody
+        // Beacon login response contains accountLegacyId in lastSelectedAccount
+        const accountIdFromLogin = loginData?.messageInfo?.lastSelectedAccount?.accountLegacyId;
+        if (accountIdFromLogin && (!orderBody?.accountNumber && !orderBody?.accountId)) {
+            console.log(`Extracting accountId from Beacon login response: ${accountIdFromLogin}`);
+            // Add to orderBody so buildPayload can use it
+            if (!orderBody) orderBody = {};
+            orderBody.accountNumber = accountIdFromLogin;
+        }
+        
+        // Step 3: Submit order with authentication
         const orderUrl = `${credentials.apiBaseUrl}/v1/rest/com/becn/submitOrder`;
         
         // Build payload dynamically based on environment and flags
         const payload = buildPayload(context, credentials, orderBody);
         
+        // CRITICAL: Ensure line items have required Beacon fields
+        if (payload.lineItems && Array.isArray(payload.lineItems)) {
+            payload.lineItems = payload.lineItems.map((item) => {
+                // Ensure productNumber exists (required by Beacon - same as itemNumber)
+                if (!item.productNumber) {
+                    item.productNumber = item.itemNumber || '';
+                }
+                // Ensure unitOfMeasure exists (required by Beacon - not 'uom')
+                if (!item.unitOfMeasure && item.uom) {
+                    item.unitOfMeasure = item.uom;
+                    delete item.uom; // Remove 'uom' if it exists
+                }
+                if (!item.unitOfMeasure) {
+                    item.unitOfMeasure = 'EA'; // Default fallback
+                }
+                return item;
+            });
+        }
+        
+        // If accountId is still missing, inject it from login response
+        if (!payload.accountId && accountIdFromLogin) {
+            console.log(`Injecting accountId from login response into payload: ${accountIdFromLogin}`);
+            payload.accountId = accountIdFromLogin;
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:475',message:'PAYLOAD_BEFORE_SUBMIT',data:{hasAccountId:!!payload.accountId,accountId:payload.accountId,accountIdFromLogin,orderBodyAccountNumber:orderBody?.accountNumber},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H3'})}).catch(()=>{});
+        // #endregion
+        
         // Log order payload before sending to supplier API
         logOrder(payload, "BEACON", "before sending to Beacon API");
         
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:498',message:'BEACON_PAYLOAD_BEFORE_SUBMIT',data:{hasAccountId:!!payload.accountId,accountId:payload.accountId,hasLineItems:!!payload.lineItems,lineItemsCount:payload.lineItems?.length||0,hasShipping:!!payload.shipping,hasAddress:!!payload.shipping?.address,addressLine1:payload.shipping?.address?.address1,hasJob:!!payload.job,jobName:payload.job?.jobName,jobNumber:payload.job?.jobNumber,hasJobNumber:!!payload.job?.jobNumber,hasPurchaseOrderNo:!!payload.purchaseOrderNo,payloadKeys:Object.keys(payload)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+        // #endregion
+        
+        // CRITICAL: Final safety check - ensure job.jobNumber exists before API call
+        if (!payload.job) {
+            console.error('❌ CRITICAL: payload.job is missing! Creating job object.');
+            payload.job = { checked: false, jobName: '', jobNumber: '999' };
+        }
+        if (!payload.job.jobNumber || payload.job.jobNumber.trim() === '') {
+            console.error('❌ CRITICAL: payload.job.jobNumber is missing or empty right before API call! Forcing default: 999');
+            payload.job.jobNumber = '999';
+        }
+        
         console.log("Submitting order to:", orderUrl);
+        console.log("Payload structure:", {
+            hasAccountId: !!payload.accountId,
+            accountId: payload.accountId,
+            hasLineItems: !!payload.lineItems,
+            lineItemsCount: payload.lineItems?.length || 0,
+            hasShipping: !!payload.shipping,
+            hasAddress: !!payload.shipping?.address,
+            addressLine1: payload.shipping?.address?.address1,
+            hasJob: !!payload.job,
+            jobChecked: payload.job?.checked,
+            jobName: payload.job?.jobName,
+            jobNumber: payload.job?.jobNumber,
+            jobNumberType: typeof payload.job?.jobNumber,
+            jobNumberLength: payload.job?.jobNumber?.length,
+            hasJobNumber: !!payload.job?.jobNumber && payload.job.jobNumber.trim() !== '',
+            hasPurchaseOrderNo: !!payload.purchaseOrderNo
+        });
+        
+        // Log the full job object to verify structure
+        console.log("🔍 Full job object:", JSON.stringify(payload.job, null, 2));
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:575',message:'FULL_PAYLOAD_STRUCTURE',data:{hasJob:!!payload.job,jobObject:payload.job,jobNumber:payload.job?.jobNumber,jobNumberType:typeof payload.job?.jobNumber,fullPayloadKeys:Object.keys(payload)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+        // #endregion
+        
+        // Log the exact payload being sent to Beacon API
+        console.log("📤 EXACT PAYLOAD BEING SENT TO BEACON API:");
+        console.log(JSON.stringify(payload, null, 2));
         
         let orderResponse;
         
@@ -489,17 +731,33 @@ exports.main = async (context = {}) => {
             console.log("Order Response Status:", orderResponse.status);
             console.log("Order Response:", JSON.stringify(orderResponse.data, null, 2));
             
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:534',message:'BEACON_ORDER_RESPONSE',data:{status:orderResponse.status,hasData:!!orderResponse.data,dataKeys:orderResponse.data?Object.keys(orderResponse.data):[],fullResponse:JSON.stringify(orderResponse.data).substring(0,1000)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+            // #endregion
+            
             // Check for errors in response
             const orderData = orderResponse.data || {};
             const orderMessageCode = orderData.messageCode;
             const orderMessageInfo = orderData.messageInfo;
+            const orderResult = orderData.result;
+            const orderMessage = orderData.message;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:542',message:'BEACON_ERROR_CHECK',data:{messageCode:orderMessageCode,hasMessageInfo:!!orderMessageInfo,messageInfo:orderMessageInfo,hasResult:!!orderResult,result:orderResult,hasMessage:!!orderMessage,message:orderMessage,isError:orderMessageCode&&orderMessageCode!==0&&orderMessageCode!==200},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+            // #endregion
             
             if (orderMessageCode && orderMessageCode !== 0 && orderMessageCode !== 200) {
                 console.error("Beacon order submission failed:", {
                     messageCode: orderMessageCode,
                     messageInfo: orderMessageInfo,
+                    message: orderMessage,
+                    result: orderResult,
                     fullResponse: orderData
                 });
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:549',message:'BEACON_ORDER_FAILED',data:{messageCode:orderMessageCode,messageInfo:orderMessageInfo,message:orderMessage,result:orderResult,fullResponseKeys:Object.keys(orderData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+                // #endregion
                 
                 return {
                     success: false,
@@ -508,7 +766,32 @@ exports.main = async (context = {}) => {
                     cookiesCaptured: hasCookies,
                     cookieString: cookieString,
                     orderResponse: orderData,
-                    error: orderMessageInfo || "Order submission failed",
+                    error: orderMessageInfo || orderMessage || "Order submission failed",
+                    messageCode: orderMessageCode
+                };
+            }
+            
+            // Also check if result is null (Beacon API sometimes returns result: null on error)
+            if (orderResult === null && orderMessageCode) {
+                console.error("Beacon order submission failed - result is null:", {
+                    messageCode: orderMessageCode,
+                    messageInfo: orderMessageInfo,
+                    message: orderMessage,
+                    fullResponse: orderData
+                });
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'beaconOrder.js:570',message:'BEACON_ORDER_FAILED_NULL_RESULT',data:{messageCode:orderMessageCode,messageInfo:orderMessageInfo,message:orderMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'BEACON_ERROR'})}).catch(()=>{});
+                // #endregion
+                
+                return {
+                    success: false,
+                    message: "Beacon order submission failed",
+                    loginResponse: loginData,
+                    cookiesCaptured: hasCookies,
+                    cookieString: cookieString,
+                    orderResponse: orderData,
+                    error: orderMessageInfo || orderMessage || "Order submission failed - result is null",
                     messageCode: orderMessageCode
                 };
             }

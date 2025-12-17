@@ -159,10 +159,22 @@ function formatOrder(orderBody, supplier, environment = 'sandbox') {
   for (const [standardField, supplierPath] of Object.entries(fieldMappings)) {
     let value = getNestedValue(normalizedOrder, standardField);
     
+    // #region agent log
+    if (standardField === 'accountNumber' || supplierPath === 'accountId') {
+      fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:160',message:'ACCOUNT_NUMBER_MAPPING',data:{standardField,supplierPath,value,hasValue:value!==undefined&&value!==null&&value!=='',normalizedOrderKeys:normalizedOrder?Object.keys(normalizedOrder):[],supplier:supplierUpper},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H3'})}).catch(()=>{});
+    }
+    // #endregion
+    
     if (value !== undefined && value !== null && value !== '') {
       // Apply enum mapping
       value = applyEnumMapping(standardField, value, config);
       setNestedValue(payload, supplierPath, value);
+      
+      // #region agent log
+      if (standardField === 'accountNumber' || supplierPath === 'accountId') {
+        fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'formatOrder.js:167',message:'ACCOUNT_ID_SET',data:{standardField,supplierPath,value,payloadAccountId:payload.accountId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2,H3'})}).catch(()=>{});
+      }
+      // #endregion
     }
   }
   
@@ -241,6 +253,21 @@ function formatOrder(orderBody, supplier, environment = 'sandbox') {
         // Ensure itemDescription exists (even if empty)
         if (supplierItem.itemDescription === undefined) {
           supplierItem.itemDescription = item.description || '';
+        }
+      }
+      
+      // For BEACON, ensure productNumber exists (required field - same as itemNumber)
+      if (supplierUpper === 'BEACON') {
+        if (!supplierItem.productNumber) {
+          supplierItem.productNumber = supplierItem.itemNumber || item.sku || '';
+        }
+        // Ensure unitOfMeasure is set (mapped from uom)
+        if (!supplierItem.unitOfMeasure && item.uom) {
+          supplierItem.unitOfMeasure = item.uom;
+        }
+        // Ensure unitOfMeasure has a default if still missing
+        if (!supplierItem.unitOfMeasure) {
+          supplierItem.unitOfMeasure = 'EA';
         }
       }
       

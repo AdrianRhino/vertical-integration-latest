@@ -270,41 +270,67 @@ async function associateFileWithOrder(fileId, orderId) {
 }
 
 /**
- * Associate file with deal
+ * Associate file with deal using HubSpot V4 Associations API
+ * Uses axios (not native https module) for consistency
  */
 async function associateFileWithDeal(fileId, dealId) {
+  // Verify axios is available (should always be, but double-check)
+  if (typeof axios === 'undefined' || !axios.put) {
+    const errorMsg = 'axios is not available. This should not happen.';
+    console.error('❌', errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'uploadPDFToHubspot.js:275',message:'ASSOCIATE_FILE_DEAL_START',data:{fileId,dealId,hasAxios:typeof axios!=='undefined',axiosType:typeof axios},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+  
   const apiKey = process.env.HUBSPOT_API_KEY;
   
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.hubapi.com',
-      path: `/crm/v4/objects/files/${fileId}/associations/deals/${dealId}`,
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
+  if (!apiKey) {
+    throw new Error('HUBSPOT_API_KEY is required for file association');
+  }
+  
+  try {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'uploadPDFToHubspot.js:283',message:'BEFORE_AXIOS_PUT',data:{fileId,dealId,url:`/crm/v4/objects/files/${fileId}/associations/deals/${dealId}`,hasAxios:typeof axios!=='undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
+    const response = await axios.put(
+      `https://api.hubapi.com/crm/v4/objects/files/${fileId}/associations/deals/${dealId}`,
+      {
+        associationCategory: 'HUBSPOT_DEFINED',
+        associationTypeId: 3 // File to Deal association
       },
-    };
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
     
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve();
-        } else {
-          reject(new Error(`Association failed: ${res.statusCode}`));
-        }
-      });
-    });
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'uploadPDFToHubspot.js:302',message:'ASSOCIATION_SUCCESS',data:{fileId,dealId,statusCode:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     
-    req.on('error', reject);
-    req.write(JSON.stringify({
-      associationCategory: 'HUBSPOT_DEFINED',
-      associationTypeId: 3 // File to Deal association
-    }));
-    req.end();
-  });
+    console.log(`✅ File ${fileId} successfully associated with deal ${dealId}`);
+    return response.data;
+  } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/b131dc2d-5624-4f61-98fb-efc543f7726a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'uploadPDFToHubspot.js:310',message:'ASSOCIATION_ERROR',data:{fileId,dealId,error:error.message,statusCode:error.response?.status,errorType:error.constructor.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
+    // Provide more helpful error message
+    const errorMessage = error.message || 'Unknown error';
+    if (errorMessage.includes('https is not defined')) {
+      console.error('❌ CRITICAL: Old code version detected! The error "https is not defined" means the serverless functions are running cached/old code.');
+      console.error('❌ ACTION REQUIRED: Restart/redeploy your HubSpot serverless functions to load the updated code.');
+      throw new Error('Serverless functions need to be restarted. Old code version detected (https module reference). Please redeploy.');
+    }
+    
+    throw error;
+  }
 }
 
 module.exports = {

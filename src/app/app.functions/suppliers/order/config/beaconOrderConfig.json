@@ -2,7 +2,7 @@
   "supplier": "BEACON",
   "environment": "sandbox",
   "fieldMappings": {
-    "accountNumber": "accountNumber",
+    "accountNumber": "accountId",
     "branchId": "branchId",
     "poNumber": "poNumber",
     "jobName": "jobName",
@@ -22,13 +22,14 @@
     "sku": "itemNumber",
     "description": "description",
     "qty": "quantity",
-    "uom": "uom",
+    "uom": "unitOfMeasure",
     "price": "unitPrice"
   },
   "defaults": {
     "orderType": "STANDARD",
     "currency": "USD",
     "job.checked": false,
+    "job.jobNumber": "999",
     "shipping.shippingMethod": "D",
     "pickupTime": "ANYTIME"
   },

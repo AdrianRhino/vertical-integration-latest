@@ -272,15 +272,21 @@ const ReviewSubmit = ({
     }
   };
 
-  const setSubmitStatus = async (status, orderId) => {
+  const setSubmitStatus = async (status, orderId, pdfUrl = null) => {
     const orderIdToSubmit = orderId;
+    const parameters = {
+      status: status,
+      orderId: orderIdToSubmit,
+    };
+    // Add pdfUrl if provided
+    if (pdfUrl) {
+      parameters.pdfUrl = pdfUrl;
+    }
     const response = await hubspot.serverless("setSubmitStatus", {
-      parameters: {
-        status: status,
-        orderId: orderIdToSubmit,
-      },
+      parameters: parameters,
     });
     console.log("response", response);
+    return response;
   };
 
   const TestData = [
