@@ -1,148 +1,131 @@
 import { useState, useEffect } from "react";
-import { Text, Select, Alert } from "@hubspot/ui-extensions";
+import { Text, Select } from "@hubspot/ui-extensions";
 import { hubspot } from "@hubspot/ui-extensions";
 import { appOptions } from "../helperFunctions/appOptions";
-import { parseLineItemsFromString } from "../helperFunctions/helper";
 
-const OrderStart = ({ setFullOrder, fullOrder, context, setTagStatus, clearOrder, setOrderPage, setNextButtonDisabled }) => {
-  const [chosenAppOption, setChosenAppOption] = useState(null);
+const OrderStart = ({ order, setOrder, context, setStatus, clearOrder, setCurrentPage, setCanGoNext }) => {
   const [allOrders, setAllOrders] = useState([]);
   const [orderOptions, setOrderOptions] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showAlert, setShowAlert] = useState(false); // move to state above
+  const [selectedOption, setSelectedOption] = useState(null);
 
-useEffect(() => {
-  if (!chosenAppOption || chosenAppOption === "New Order") {
-    return;
-  }
-
-  getAllOrders();
-}, [chosenAppOption]);
-
+  // Load all orders when user selects "Draft Order" or "Submitted Order"
   useEffect(() => {
-    // Filter orders based on selected option
-    const filteredOrders = allOrders.filter((order) => {
-      const status = order.value.properties.status;
-      if (chosenAppOption === "Draft Order") return status === "Draft";
-      if (chosenAppOption === "Submitted Order") {
-       // setOrderPage(4);
-        return status === "Submitted";
-      } 
-      return false;
-    });
+    if (selectedOption === "Draft Order" || selectedOption === "Submitted Order") {
+      loadAllOrders();
+    }
+  }, [selectedOption]);
 
-    setOrderOptions(
-      filteredOrders.map((order) => ({
-        label: `${order.value.properties.status} Order - ${order.value.properties.order_id || order.value.id}`,
-        value: order.value.id,
-      }))
-    );
-  }, [allOrders, chosenAppOption]);
-
+  // Filter orders into a simple list
   useEffect(() => {
-    console.log("This is the selectedOrder", selectedOrder?.value?.properties?.status);
-    setTagStatus(selectedOrder?.value?.properties?.status || "Draft");
-  }, [selectedOrder]);
+    if (allOrders.length === 0) {
+      setOrderOptions([]);
+      return;
+    }
 
-
-    useEffect(() => {
-      if (fullOrder.selectedOrder) {
-        console.log("Print raw selected order string")
-        const str = fullOrder?.selectedOrder?.value?.properties?.payload_snapshot;
-        console.log("🔍 Payload snapshot:", str);
-        const lines = parseLineItemsFromString(str);
-        console.log("📋 Parsed lines:", lines);
-        setFullOrder((prev) => ({ ...prev, selectedOrderItems: lines.lines }));
+    // Simple filter: just check status
+    const filtered = [];
+    for (let i = 0; i < allOrders.length; i++) {
+      const orderItem = allOrders[i];
+      const status = orderItem.value.properties.status;
+      
+      if (selectedOption === "Draft Order" && status === "Draft") {
+        filtered.push(orderItem);
+      } else if (selectedOption === "Submitted Order" && status === "Submitted") {
+        filtered.push(orderItem);
       }
-    }, [fullOrder.selectedOrder])
+    }
 
-
-  const getAllOrders = async () => {
-    try {
-      console.log("getAllOrders");
-      const response = await hubspot.serverless("getDraftOrders", {
-        parameters: {
-          context: context,
-          // Get all orders, we'll filter by status in the UI
-        },
+    // Convert to simple options list
+    const options = [];
+    for (let i = 0; i < filtered.length; i++) {
+      const orderItem = filtered[i];
+      options.push({
+        label: `${orderItem.value.properties.status} Order - ${orderItem.value.properties.order_id || orderItem.value.id}`,
+        value: orderItem.value.id,
       });
-      console.log("response", response);
-      setAllOrders(response.body.orders);
+    }
+    setOrderOptions(options);
+  }, [allOrders, selectedOption]);
+
+  // Update status tag when order is selected
+  useEffect(() => {
+    if (order.selectedOrder) {
+      const status = order.selectedOrder.value?.properties?.status || "Draft";
+      setStatus(status);
+    } else {
+      setStatus("Draft");
+    }
+  }, [order.selectedOrder]);
+
+  // Simple function to load all orders
+  const loadAllOrders = async () => {
+    try {
+      const response = await hubspot.serverless("getDraftOrders", {
+        parameters: { context: context },
+      });
+      setAllOrders(response.body.orders || []);
     } catch (error) {
-      console.error("❌ Error getting orders:", error);
+      console.error("Error getting orders:", error);
     }
   };
 
-useEffect(() => {
-  if (fullOrder.selectedOrderId) {
-    console.log('current order', allOrders.find((order) => order.value.id === fullOrder.selectedOrderId));
-    const currentOrder = allOrders.find((order) => order.value.id === fullOrder.selectedOrderId);
-    setTagStatus(currentOrder?.value?.properties?.status);
-  } else {
-    setTagStatus("Draft");
-  }
-}, [fullOrder.selectedOrderId, allOrders]);
-
-useEffect(() => {
-  if (chosenAppOption === "New Order") {
-    setNextButtonDisabled(false);
-    return;
-  }
-
-  if (chosenAppOption && fullOrder.selectedOrderId) {
-    setNextButtonDisabled(false);
-  } else {
-    setNextButtonDisabled(true);
-  }
-}, [chosenAppOption, fullOrder.selectedOrderId, setNextButtonDisabled]);
+  // Enable next button
+  useEffect(() => {
+    if (selectedOption === "New Order") {
+      setCanGoNext(true);
+    } else if (selectedOption && order.selectedOrderId) {
+      setCanGoNext(true);
+    } else {
+      setCanGoNext(false);
+    }
+  }, [selectedOption, order.selectedOrderId]);
 
   return (
     <>
       <Text></Text>
-      {showAlert && (
-        <Alert title="Error" variant="danger">
-          We've identified the issue that's causing multiple apps to be unavailable for some customers. We are working with our cloud platform partner, AWS, to resolve the issue.
-        </Alert>
-      )}
-      <Text></Text>
       <Select
         label="Create New Order"
         options={appOptions}
-        value={fullOrder.orderType}
+        value={order.orderType}
         onChange={(value) => {
-          setChosenAppOption(value);
-          setSelectedOrder(null);
-          setOrderOptions([]);
+          setSelectedOption(value);
           if (value === "New Order") {
             clearOrder();
-            setFullOrder((prev) => ({ ...prev, orderType: value }));
+            setOrder((prev) => ({ ...prev, orderType: value }));
             return;
           }
 
+          // Clear selection when switching
           setAllOrders([]);
-          setFullOrder((prev) => ({
+          setOrder((prev) => ({
             ...prev,
             orderType: value,
-            selectedOrderId: null,
+            selectedOrderId: "",
             selectedOrder: null,
-            selectedOrderItems: [],
           }));
-          setNextButtonDisabled(true);
+          setCanGoNext(false);
         }}
       />
       <Text></Text>
-      {(chosenAppOption === "Draft Order" || chosenAppOption === "Submitted Order") && (
+      {(selectedOption === "Draft Order" || selectedOption === "Submitted Order") && (
         <Select
-          label={`${chosenAppOption} List`}
+          label={`${selectedOption} List`}
           options={orderOptions}
-          value={fullOrder.selectedOrderId || undefined}
+          value={order.selectedOrderId || undefined}
           onChange={(value) => {
-            const order = allOrders.find((order) => order.value.id === value);
-            setSelectedOrder(order);
-            setFullOrder((prev) => ({
+            // Find the selected order from the list
+            let foundOrder = null;
+            for (let i = 0; i < allOrders.length; i++) {
+              if (allOrders[i].value.id === value) {
+                foundOrder = allOrders[i];
+                break;
+              }
+            }
+
+            setOrder((prev) => ({
               ...prev,
               selectedOrderId: value,
-              selectedOrder: order,
+              selectedOrder: foundOrder,
             }));
           }}
         />

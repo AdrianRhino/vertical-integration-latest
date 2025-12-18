@@ -1,16 +1,50 @@
-import { Text, Select, Button } from "@hubspot/ui-extensions";
+import { Text, Select } from "@hubspot/ui-extensions";
 import { deliveryComponent, deliveryRequiredFields } from "../helperFunctions/helper";
 import { renderField } from "../helperFunctions/componentRender";
 import AddressDisplay from "../helperFunctions/AddressDisplay";
 import { useEffect, useState } from "react";
 
-const DeliveryForm = ({ fullOrder, setFullOrder, runServerless, parsedOrder, setNextButtonDisabled }) => {
+const DeliveryForm = ({ order, setOrder, runServerless, setCanGoNext }) => {
   const [productionTeam, setProductionTeam] = useState([]);
   const [isAddressEditing, setIsAddressEditing] = useState(false);
 
-  // Create a handler that updates the full order
-  const handleFieldChange = (fieldName, value) => {
-    setFullOrder((prev) => ({
+  // Load production team when page loads
+  useEffect(() => {
+    loadProductionTeam();
+  }, []);
+
+  // Simple validation: check if required fields are filled
+  useEffect(() => {
+    const delivery = order.delivery || {};
+    const hasTeam = productionTeam.length > 0;
+    
+    // Check each required field
+    let allFieldsFilled = true;
+    for (let i = 0; i < deliveryRequiredFields.length; i++) {
+      const fieldName = deliveryRequiredFields[i];
+      const value = delivery[fieldName];
+      if (!value || value === "") {
+        allFieldsFilled = false;
+        break;
+      }
+    }
+
+    setCanGoNext(hasTeam && allFieldsFilled);
+  }, [productionTeam.length, order.delivery, setCanGoNext]);
+
+  // Simple function to load production team
+  const loadProductionTeam = async () => {
+    try {
+      const response = await runServerless({ name: "getProductionTeam" });
+      setProductionTeam(response.response.body.data || []);
+    } catch (error) {
+      console.error("Error loading production team:", error);
+    }
+  };
+
+  // Simple function to update a field
+  const updateField = (fieldName, value) => {
+    setOrder((prev) => ({
       ...prev,
       delivery: {
         ...prev.delivery,
@@ -19,62 +53,15 @@ const DeliveryForm = ({ fullOrder, setFullOrder, runServerless, parsedOrder, set
     }));
   };
 
-useEffect(() => {
-  const fetchProductionTeam = async () => {
-    const response = await runServerless({
-      name: "getProductionTeam",
-    });
-    setProductionTeam(response.response.body.data || []);
-    console.log("Production team:", response.response.body.data);
-  };
-
-  fetchProductionTeam();
-}, [runServerless]);
-
-useEffect(() => {
-  const mergedDelivery = {
-    ...(parsedOrder?.delivery || {}),
-    ...(fullOrder?.delivery || {}),
-  };
-
-  const hasProductionTeam = productionTeam.length > 0;
-  const hasRequiredFields = deliveryRequiredFields.every((fieldKey) => {
-    const value = mergedDelivery[fieldKey];
-    return value !== undefined && value !== null && value !== "";
-  });
-
-  if (hasProductionTeam && hasRequiredFields) {
-    setNextButtonDisabled(false);
-  } else {
-    setNextButtonDisabled(true);
-  }
-}, [
-  productionTeam.length,
-  fullOrder?.delivery?.primary_contact,
-  fullOrder?.delivery?.delivery_type,
-  fullOrder?.delivery?.time_code,
-  parsedOrder?.delivery?.primary_contact,
-  parsedOrder?.delivery?.delivery_type,
-  parsedOrder?.delivery?.time_code,
-  setNextButtonDisabled,
-]);
-
   return (
     <>
       <Text>Delivery</Text>
       <Select
-        label="Primary Contact" // pull from hubspot teams
+        label="Primary Contact"
         options={productionTeam}
-        value={fullOrder?.delivery?.primary_contact || parsedOrder?.delivery?.primary_contact}
-        onChange={(val) => {
-          handleFieldChange("primary_contact", val);
-          setFullOrder((prev) => ({
-            ...prev,
-            delivery: {
-              ...prev.delivery,
-              primary_contact: val,
-            },
-          }));
+        value={order.delivery?.primary_contact}
+        onChange={(value) => {
+          updateField("primary_contact", value);
         }}
       />
       {deliveryComponent
@@ -82,17 +69,17 @@ useEffect(() => {
         .map((field) =>
           renderField(
             field,
-            null, // dropdownOptions
-            null, // ownerOptions
-            fullOrder?.delivery || parsedOrder?.delivery || {}, // formData
-            handleFieldChange, // setFormData function
-            null // contactValues
+            null,
+            null,
+            order.delivery || {},
+            updateField,
+            null
           )
         )}
       <Text></Text>
       <AddressDisplay
-        address={fullOrder?.delivery || parsedOrder?.delivery || {}}
-        onFieldChange={handleFieldChange}
+        address={order.delivery || {}}
+        onFieldChange={updateField}
         isEditing={isAddressEditing}
         onEdit={() => setIsAddressEditing(true)}
         onSave={() => setIsAddressEditing(false)}

@@ -1,119 +1,75 @@
 import { Select } from "@hubspot/ui-extensions";
-import { supplierOptions, templateOptions } from "../helperFunctions/appOptions";
 import { useEffect, useState } from "react";
+import { supplierOptions, templateOptions } from "../helperFunctions/appOptions";
 
-const PickSetup = ({ context, setFullOrder, runServerless, fullOrder, parsedOrder, setNextButtonDisabled }) => {
-
+const PickSetup = ({ order, setOrder, context, runServerless, setCanGoNext }) => {
   const [tickets, setTickets] = useState([]);
 
-  const getTickets = async () => {
+  // Load tickets when page loads
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  // Simple validation: check if all three fields are filled
+  useEffect(() => {
+    const hasTicket = order.ticket && order.ticket !== "";
+    const hasSupplier = order.supplier && order.supplier !== "";
+    const hasTemplate = order.template && order.template !== "";
+
+    setCanGoNext(hasTicket && hasSupplier && hasTemplate);
+  }, [order.ticket, order.supplier, order.template]);
+
+  // Simple function to load tickets
+  const loadTickets = async () => {
     try {
       const response = await runServerless({
         name: "getTickets",
         parameters: { context },
       });
-      console.log("tickets: ", response);
-      setTickets(response.response.body.tickets);
+      setTickets(response.response.body.tickets || []);
     } catch (err) {
       console.error("Error fetching tickets:", err);
     }
-  }
-
-  useEffect(() => {
-    getTickets();
-  }, []);
-
-  // Validate whenever fullOrder or parsedOrder changes
-  useEffect(() => {
-    const ticket = fullOrder.ticket || parsedOrder?.ticket;
-    const supplier = fullOrder.supplier || parsedOrder?.supplier;
-    const template = fullOrder.template || parsedOrder?.template;
-    
-    console.log("PickSetup validation check:", { 
-      ticket, 
-      supplier, 
-      template, 
-      fullOrderTicket: fullOrder.ticket,
-      fullOrderSupplier: fullOrder.supplier,
-      fullOrderTemplate: fullOrder.template,
-      parsedOrderTicket: parsedOrder?.ticket,
-      parsedOrderSupplier: parsedOrder?.supplier,
-      parsedOrderTemplate: parsedOrder?.template
-    });
-    
-    // Check if values exist (handle strings, numbers, and truthy values)
-    const hasTicket = ticket !== undefined && ticket !== null && ticket !== "";
-    const hasSupplier = supplier !== undefined && supplier !== null && supplier !== "";
-    const hasTemplate = template !== undefined && template !== null && template !== "";
-    
-    const isValid = hasTicket && hasSupplier && hasTemplate;
-    console.log("PickSetup validation result:", { hasTicket, hasSupplier, hasTemplate, isValid });
-    
-    setNextButtonDisabled(!isValid);
-  }, [
-    fullOrder.ticket, 
-    fullOrder.supplier, 
-    fullOrder.template,
-    fullOrder,
-    parsedOrder,
-    setNextButtonDisabled
-  ]);
-
-  const validateAndSetDisabled = (ticket, supplier, template) => {
-    const hasTicket = ticket !== undefined && ticket !== null && ticket !== "";
-    const hasSupplier = supplier !== undefined && supplier !== null && supplier !== "";
-    const hasTemplate = template !== undefined && template !== null && template !== "";
-    const isValid = hasTicket && hasSupplier && hasTemplate;
-    setNextButtonDisabled(!isValid);
   };
 
   return (
     <>
-      <Select 
-      label="Ticket Selection List" 
-      options={tickets} 
-      value={fullOrder.ticket || parsedOrder?.ticket}
-      onChange={(value) => {
-        const updatedOrder = {...fullOrder, ticket: value};
-        setFullOrder(updatedOrder);
-        validateAndSetDisabled(
-          value || parsedOrder?.ticket,
-          updatedOrder.supplier || parsedOrder?.supplier,
-          updatedOrder.template || parsedOrder?.template
-        );
-      }}
+      <Select
+        label="Ticket Selection List"
+        options={tickets}
+        value={order.ticket}
+        onChange={(value) => {
+          setOrder((prev) => ({ ...prev, ticket: value }));
+        }}
       />
-      <Select 
-      label="Select Supplier" 
-      options={supplierOptions} 
-      value={fullOrder.supplier || parsedOrder?.supplier}
-      onChange={(value) => {
-        const updatedOrder = {...fullOrder, supplier: value};
-        setFullOrder(updatedOrder);
-        validateAndSetDisabled(
-          updatedOrder.ticket || parsedOrder?.ticket,
-          value || parsedOrder?.supplier,
-          updatedOrder.template || parsedOrder?.template
-        );
-      }}
+      <Select
+        label="Select Supplier"
+        options={supplierOptions}
+        value={order.supplier}
+        onChange={(value) => {
+          setOrder((prev) => ({ ...prev, supplier: value }));
+        }}
       />
-      <Select 
-      label="Select Template" 
-      options={templateOptions} 
-      value={fullOrder.template || parsedOrder?.template}
-      onChange={(value) => {
-        const updatedOrder = {
-          ...fullOrder, 
-          template: value, 
-          templateItems: templateOptions.find(template => template.value === value)?.items
-        };
-        setFullOrder(updatedOrder);
-        validateAndSetDisabled(
-          updatedOrder.ticket || parsedOrder?.ticket,
-          updatedOrder.supplier || parsedOrder?.supplier,
-          value || parsedOrder?.template
-        );
-      }}
+      <Select
+        label="Select Template"
+        options={templateOptions}
+        value={order.template}
+        onChange={(value) => {
+          // Find template items (simple search)
+          let templateItems = [];
+          for (let i = 0; i < templateOptions.length; i++) {
+            if (templateOptions[i].value === value) {
+              templateItems = templateOptions[i].items || [];
+              break;
+            }
+          }
+
+          setOrder((prev) => ({
+            ...prev,
+            template: value,
+            templateItems: templateItems,
+          }));
+        }}
       />
     </>
   );

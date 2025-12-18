@@ -1,7 +1,7 @@
 import { Text, Button, hubspot } from "@hubspot/ui-extensions";
 import { useState, useEffect } from "react";
 
-const LoginTesting = () => {
+const LoginTesting = ({ order }) => {
     const [abcLoginToken, setAbcLoginToken] = useState(null);
     const [abcLoginTokenSandbox, setAbcLoginTokenSandbox] = useState(null);
     const [abcLoginTokenError, setAbcLoginTokenError] = useState(null);

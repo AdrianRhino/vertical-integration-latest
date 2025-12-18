@@ -10,8 +10,9 @@ import {
   Text,
   hubspot,
 } from "@hubspot/ui-extensions";
-import unifiedConfig from "../config/unifiedOrderConfig.json";
-import supplierEnvironments from "../config/supplierEnvironments.json";
+// Config files removed during simplification - using empty fallbacks for testing page
+const unifiedConfig = { suppliers: {} };
+const supplierEnvironments = { environments: {} };
 
 // UnifiedOrder (simple shape)
 // Required: accountNumber, branchId, fulfillmentMethod, lineItems[]
@@ -1055,7 +1056,13 @@ function buildUnifiedFromExisting(fullOrder = {}, parsedOrder = {}) {
   };
 }
 
-const OrderTest = ({ fullOrder, parsedOrder }) => {
+const OrderTest = ({ order }) => {
+  // Convert simplified order to format expected by this component
+  const fullOrder = {
+    ...order,
+    fullOrderItems: order.items || [],
+  };
+  const parsedOrder = null; // No longer using parsedOrder
   const [lastResult, setLastResult] = useState(null);
   const [lastError, setLastError] = useState("");
   const [lastWarnings, setLastWarnings] = useState([]);

@@ -1,152 +1,100 @@
-# Vertical Integration Architecture
+# Vertical Integration Extension
 
 ## Overview
 
-This system follows a **recursive simplicity** architecture where all order processing emerges from 4 composable primitives, similar to how DNA's 4 bases create all life.
+A simplified HubSpot UI extension for managing material orders with suppliers (ABC, SRS, Beacon). The system uses simple arrays and objects with straightforward functions - no complex abstractions.
 
-## The "4 Bases" (Primitive Operations)
+## Architecture
 
-All order processing reduces to these 4 composable primitives:
-
-1. **Accessor** - Get value from nested object using dot path
-2. **Normalizer** - Convert value to standard format (dates, strings, numbers)
-3. **Validator** - Check if value meets rules
-4. **Formatter** - Convert value to target format
-
-**Composition Rule**: These 4 primitives compose to create all functionality:
-- **Extractor** = Accessor + Normalizer
-- **Transformer** = Accessor + Normalizer + Formatter
-- **Field Builder** = Accessor + Normalizer + Validator + Formatter
-- **Order Builder** = Multiple Field Builders composed
-- **Supplier Adapter** = Order Builder + Supplier-specific Formatters
-
-## Core Data Model
-
-### InternalOrder (Canonical Shape)
-
-All orders flow through the `InternalOrder` shape before being transformed to supplier-specific formats. This is the single source of truth.
-
-```javascript
-{
-  supplier: "ABC" | "Beacon" | "SRS",
-  accountNumber: string,
-  branchId: string,
-  status: "Draft" | "Priced" | "Submitted",
-  poNumber?: string,
-  jobName?: string,
-  jobNumber?: string,
-  delivery: {
-    method: "Delivery" | "Pickup",
-    date: string, // YYYY-MM-DD
-    timeCode: string,
-    fromTime?: string,
-    toTime?: string,
-    address: { line1, city, state, postalCode },
-    contact: { name, phone, email },
-    notes?: string
-  },
-  lineItems: CanonicalLineItem[]
-}
-```
-
-## Pipeline: Input → Filter → Transform → Store → Output → Loop
-
-| Stage | Description | File |
-|-------|-------------|------|
-| **Input** | HubSpot Deal + User inputs → InternalOrder | `pipeline/input.js` |
-| **Filter** | Validate, sanitize, merge data | `pipeline/filter.js` |
-| **Transform** | Apply defaults, normalize types | `pipeline/transform.js` |
-| **Store** | Save InternalOrder to HubSpot | `pipeline/store.js` |
-| **Output** | InternalOrder → supplier payload | `pipeline/output.js` |
-| **Loop** | Update order with response | (in adapters) |
-
-## Configuration-Driven
-
-All supplier-specific logic lives in JSON config files:
-
-- `config/abc.json` - ABC Supply configuration
-- `config/beacon.json` - Beacon Building Products configuration
-- `config/srs.json` - SRS Distribution configuration
-
-Each config defines:
-- `fieldMappings` - Maps InternalOrder fields → supplier field paths
-- `lineItemMappings` - Maps canonical line items → supplier format
-- `defaults` - Default values for missing optional fields
-- `enumMappings` - Maps canonical enums → supplier-specific values
-- `wrapper` - Wraps payload (e.g., ABC wraps in array)
-
-## Adding a New Supplier
-
-To add a new supplier:
-
-1. Create `config/newSupplier.json` with field mappings, defaults, etc.
-2. Create `adapters/newSupplierAdapter.js` extending `BaseAdapter`
-3. Register in `adapters/adapterRegistry.js`
-
-That's it! No changes to core logic needed.
-
-## Usage Example
-
-```javascript
-import { inputStage } from "./pipeline/input.js";
-import { filterStage } from "./pipeline/filter.js";
-import { getAdapter } from "./adapters/adapterRegistry.js";
-
-// Build InternalOrder
-const { order, errors } = inputStage(fullOrder, parsedOrder, {});
-
-// Validate
-const { order: validatedOrder, errors: filterErrors } = filterStage(order);
-
-// Transform to supplier format
-const adapter = getAdapter("ABC", "sandbox");
-const payload = adapter.transform(validatedOrder);
-
-// Submit (via serverless function)
-const response = await hubspot.serverless("abcOrderSandbox", {
-  parameters: { orderBody: payload }
-});
-```
+The extension follows a simple, straightforward design:
+- **Single order state** - One `order` object with simple fields (supplier, ticket, template, items array, delivery object)
+- **Simple functions** - Direct operations on arrays and objects, no pipeline abstractions
+- **Config-driven** - Supplier-specific logic in JSON configs (in app.functions)
+- **Serverless functions** - Backend processing handled by HubSpot serverless functions
 
 ## File Structure
 
 ```
 /extensions/
-  /domain/
-    primitives.js          # The 4 base operations
-    internalOrder.js       # Type definitions
-    orderBuilder.js        # Builds InternalOrder from inputs
+  Example.jsx                    # Main entry point, manages order state and page routing
+  /pages/
+    00-orderStart.jsx           # Order selection (new/draft/submitted)
+    01-pickupSetup.jsx          # Supplier, ticket, template selection
+    02-pricingTable.jsx         # Product search and line items
+    03-deliveryForm.jsx         # Delivery address and details
+    04-reviewSubmit.jsx         # Order review and submission
+    05-successPage.jsx          # Success confirmation
+    06-orderTesting.jsx         # Testing utilities
+    07-loginTesting.jsx         # Login testing
+    08-abcSandboxOrder.jsx      # Sandbox order testing
+  /helperFunctions/
+    helper.js                   # Utility functions (moneyFormatter, formatAddressString, units)
+    appOptions.js               # Dropdown options (suppliers, templates)
+    componentRender.jsx         # Field rendering utilities
+    AddressDisplay.jsx          # Address display/edit component
+    prefillDeliveryAddress.js  # Address prefill from CRM
+    normalizeValue.js           # Value normalization for form fields
   /config/
-    abc.json              # ABC supplier config
-    beacon.json           # Beacon supplier config
-    srs.json              # SRS supplier config
-  /adapters/
-    baseAdapter.js        # Base adapter interface
-    abcAdapter.js         # ABC adapter
-    beaconAdapter.js      # Beacon adapter
-    srsAdapter.js         # SRS adapter
-    adapterRegistry.js    # Registry to get adapters
-  /pipeline/
-    input.js              # Input stage
-    filter.js             # Filter stage
-    transform.js          # Transform stage
-    store.js              # Store stage
-    output.js             # Output stage
-    transformToSupplier.js # Core transformation engine
-  /invariants/
-    checkInvariants.js    # Invariant checking
-    errorCodes.js         # Error code definitions
-  /utils/
-    configLoader.js       # Config loading
-    logger.js             # Structured logging
+    addressPrefill.json         # Address field mapping config
+  package.json                  # Dependencies
 ```
+
+## Order State
+
+The order object is a simple structure:
+
+```javascript
+{
+  supplier: "",           // "abc", "srs", or "beacon"
+  ticket: "",             // Ticket ID
+  template: "",           // Template name
+  orderType: "",          // "New Order", "Draft Order", etc.
+  items: [],              // Array of line items
+  delivery: {},           // Delivery address and details
+  status: "Draft",        // Order status
+  orderId: "",            // HubSpot order ID
+  selectedOrderId: "",    // Selected draft/submitted order ID
+  selectedOrder: null     // Full selected order object
+}
+```
+
+## Key Features
+
+1. **Draft Management** - Save and load draft orders
+2. **Product Search** - Search supplier catalogs via Supabase
+3. **Pricing** - Fetch pricing from supplier APIs
+4. **Order Submission** - Submit orders to suppliers (ABC, SRS, Beacon)
+5. **PDF Generation** - Generate and upload order PDFs to HubSpot
+
+## Serverless Functions
+
+The extension calls these serverless functions (defined in `app.functions/`):
+
+- `getDraftOrders` - Load draft/submitted orders
+- `getTickets` - Get ticket list
+- `getProductionTeam` - Get production team members
+- `supplierProducts` - Search products (Supabase)
+- `abcPricing`, `srsPricing`, `beaconPricing` - Get pricing
+- `sendDraftToHubspot` - Save draft order
+- `sendOrderToSupplier` - Submit order to supplier
+- `generateAndUploadOrderPDF` - Generate and upload PDF
+- `setSubmitStatus` - Update order status
+
+## Order Processing Flow
+
+1. **User selects order type** (new/draft/submitted) → `00-orderStart.jsx`
+2. **User selects supplier, ticket, template** → `01-pickupSetup.jsx`
+3. **User adds products and gets pricing** → `02-pricingTable.jsx`
+4. **User enters delivery details** → `03-deliveryForm.jsx`
+5. **User reviews and submits** → `04-reviewSubmit.jsx`
+   - Saves to HubSpot as draft/submitted
+   - Submits to supplier API
+   - Generates PDF and uploads to HubSpot
 
 ## Principles
 
-1. **Recursive Simplicity**: All functionality emerges from 4 primitives
-2. **Config-Driven**: All supplier-specific logic in JSON configs
-3. **Self-Healing**: Missing data gets safe defaults, never crashes
-4. **Invariant-Guarded**: Every transformation step is validated
-5. **Composable**: Primitives combine to create complex behavior
-6. **Preserve Behavior**: External API payloads remain identical
-
+1. **Simplicity** - Use simple arrays and objects, avoid complex abstractions
+2. **Direct operations** - Simple loops and object updates, no pipelines
+3. **Config-driven** - Supplier-specific logic in JSON configs (backend)
+4. **Self-healing** - Missing data gets safe defaults
+5. **Functionality preserved** - All features work the same, just simpler code

@@ -37,12 +37,12 @@ function buildHardcodedTestPayload(orderBody) {
         "purchaseOrderNo": `TEST-PO-001`, // Unique PO
         "lineItems": [
             {
-                "itemNumber": `${"315692" || orderBody?.sku || ""}`,
+                "itemNumber": `${orderBody?.sku || ""}`,
                 "quantity": 1,
                 "unitOfMeasure": "EA",
                 "description": "Test Order",
                 "lineComments": "This is a test order. Please void.",
-                "productNumber": `${"315692" || orderBody?.sku || ""}`
+                "productNumber": `${orderBody?.sku || ""}`
             }
         ],
         "shipping": {

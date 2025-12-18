@@ -1,10 +1,5 @@
 import { useState } from "react";
 import { Button, Text, Flex, hubspot, Divider } from "@hubspot/ui-extensions";
-import { inputStage } from "../pipeline/input.js";
-import { filterStage } from "../pipeline/filter.js";
-import { checkInvariants } from "../invariants/checkInvariants.js";
-import { getAdapter } from "../adapters/adapterRegistry.js";
-import { logOrderSubmission, logInvariantViolation } from "../utils/logger.js";
 
 // SHAPE: Input → Filter → Transform → Store → Output → Loop
 // INPUT: fullOrder, parsedOrder
@@ -14,7 +9,13 @@ import { logOrderSubmission, logInvariantViolation } from "../utils/logger.js";
 // OUTPUT: send to sandbox API
 // LOOP: display result, allow retry
 
-const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
+const ABCSandboxOrder = ({ order }) => {
+  // Convert simplified order to format expected by this component
+  const fullOrder = {
+    ...order,
+    fullOrderItems: order.items || [],
+  };
+  const parsedOrder = null; // No longer using parsedOrder
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingSRS, setIsSubmittingSRS] = useState(false);
   const [error, setError] = useState("");
@@ -86,27 +87,10 @@ const ABCSandboxOrder = ({ fullOrder, parsedOrder }) => {
 
       console.log("ABC Sandbox Order Response:", response);
       
-      // Log submission (using hardcoded order for now)
-      // TODO: Restore filteredOrder logging when validation is re-enabled
-      if (fullOrder) {
-        logOrderSubmission(fullOrder, "ABC", response);
-      }
-      
       setResult(response);
     } catch (err) {
       console.error("ABC Sandbox order failed:", err);
       setError(err?.message || "Failed to place ABC sandbox order.");
-      
-      // Log error
-      if (fullOrder) {
-        logInvariantViolation(
-          fullOrder,
-          "ABC",
-          { field: "order", message: err.message },
-          null,
-          null
-        );
-      }
     } finally {
       setIsSubmitting(false);
     }
